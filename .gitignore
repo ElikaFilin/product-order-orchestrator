@@ -1,0 +1,9 @@
+node_modules/
+.env
+.env.*
+!.env.example
+.runtime/
+.playwright-mcp/
+coverage/
+*.log
+.DS_Store

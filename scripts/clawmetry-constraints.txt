@@ -1,0 +1,31 @@
+# Dependency versions verified with clawmetry 0.12.915 on Python 3.9.6 (2026-10-08), used by
+# `pnpm clawmetry:setup` (pip -c). Regenerate with `pip freeze` from a venv after re-verifying.
+#
+# Pure-Python packages: the same versions on every Python.
+blinker==1.9.0
+certifi==2026.7.22
+click==8.1.8
+Flask==3.1.3
+itsdangerous==2.2.0
+Jinja2==3.1.6
+opentelemetry-proto==1.41.1
+typing_extensions==4.16.0
+waitress==3.0.2
+websocket-client==1.9.0
+Werkzeug==3.1.9
+# Compiled packages: exact on the verified Python; elsewhere the same minor release (wheels for newer
+# Pythons may only exist in later patch releases). clawmetry itself needs cryptography>=50 and cffi>=2
+# on Python 3.10+, so those two are pinned for the verified Python only.
+duckdb==1.4.4 ; python_version < "3.10"
+duckdb>=1.4.4,<1.5,!=1.4.5 ; python_version >= "3.10"
+protobuf==6.33.6 ; python_version < "3.10"
+protobuf>=6.33.6,<6.34 ; python_version >= "3.10"
+zstandard==0.25.0 ; python_version < "3.10"
+zstandard>=0.25.0,<0.26 ; python_version >= "3.10"
+MarkupSafe==3.0.4 ; python_version < "3.10"
+MarkupSafe>=3.0.4,<3.1 ; python_version >= "3.10"
+cryptography==46.0.0 ; python_version < "3.10"
+cffi==1.17.1 ; python_version < "3.10"
+pycparser==2.23 ; python_version < "3.10"
+importlib_metadata==8.7.1 ; python_version < "3.10"
+zipp==3.23.1 ; python_version < "3.10"
