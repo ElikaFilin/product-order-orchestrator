@@ -74,6 +74,12 @@ form and sends the order. Other tool calls that mention the order form or submit
 export function renderExecutePlaybook(tools: BrowserToolset, urls: ShopUrls, opts: ExecutePlaybookOptions = {}): string {
   const a = actions(tools);
   const fill = opts.fillOrderForm === true;
+  const clear = opts.clearBasket
+    ? `
+   New order: if the basket is not empty, clear it first. Remove every line whose name is not one of the operations,
+   one setQty call per line with the exact name from readCart() and 0, e.g. ${a.evalCall(`window.__poo.setQty(${JSON.stringify(EXAMPLE_NAME)}, 0)`)}.
+   Lines that are in the operations get their target in step 4.`
+    : '';
   const setQtyExample = a.evalCall(`window.__poo.setQty(${JSON.stringify(EXAMPLE_NAME)}, 2)`);
   const formHelpers = fill
     ? `
@@ -115,7 +121,7 @@ exactly as given in the task, e.g. ${setQtyExample}
 2. Wait until the page is ready: ${a.evalCall('window.__poo.status()')} (it waits by itself). If \`ready\` is false,
    ${a.pause} and call it once more; if it is still false, report every operation as \`failed\` with detail
    "the shop page did not load" (after the last step).
-3. Read the basket before changing it: ${a.evalCall('window.__poo.readCart()')}
+3. Read the basket before changing it: ${a.evalCall('window.__poo.readCart()')}${clear}
 4. For each operation make exactly one setQty call with the exact name and the targetQty.
    - \`ok\`: done, actualQty = \`after\`.
    - \`not_found\`: do not pick another product yourself; report \`not_found\` with the closest names from \`detail\`.

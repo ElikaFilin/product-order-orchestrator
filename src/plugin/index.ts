@@ -30,6 +30,7 @@ function hostOf(api: OpenClawPluginApi): PluginHost {
     pluginConfig: api.pluginConfig,
     logger: api.logger,
     registerTool: (factory, opts) => api.registerTool(factory, opts),
+    registerHook: (event, handler, opts) => api.registerHook(event, handler, opts),
     registerAgentToolResultMiddleware: (handler, options) => api.registerAgentToolResultMiddleware(handler, options),
     // Each hook's handler type is checked against the SDK in sdkCompatible() below.
     on: (hookName, handler, opts) => (api.on as (name: string, handler: unknown, opts?: unknown) => void)(hookName, handler, opts),

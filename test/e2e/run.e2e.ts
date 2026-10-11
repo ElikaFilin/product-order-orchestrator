@@ -92,6 +92,11 @@ async function withWorld(name: string, workRoot: string, probes: Probes, run: (w
     check(name, 'the bot wrote only to the owner', tg.violations.length === 0, tg.violations.join('; '));
     const leaked = mock.requests.filter((r) => JSON.stringify(r.body).includes(PRIVATE_TAB_TITLE));
     check(name, "the user's other tab never reached a model", leaked.length === 0, leaked.map((r) => `${r.agent}#${r.seq}`).join(', '));
+    const placeholders = mock.requests.filter((r) => JSON.stringify(r.body).includes('[MISSING] Expected at:'));
+    check(name, 'no prompt carries a [MISSING] workspace file', placeholders.length === 0, placeholders.map((r) => `${r.agent}#${r.seq}`).join(', '));
+    const cosPrompts = mock.requests.filter((r) => r.agent === 'cos');
+    const withFiles = cosPrompts.filter((r) => ['agents/cos/SOUL.md', 'agents/cos/MEMORY.md'].every((f) => JSON.stringify(r.body).includes(f)));
+    check(name, "COS's SOUL.md and MEMORY.md are in every COS prompt", cosPrompts.length > 0 && withFiles.length === cosPrompts.length, `${withFiles.length}/${cosPrompts.length}`);
     await writeFile(path.join(dir, 'transcript.json'), JSON.stringify({ telegram: tg.transcript, requests: mock.requests.map((r) => ({ seq: r.seq, agent: r.agent, reply: r.reply, error: r.error })) }, null, 1));
     await writeFile(path.join(dir, 'model-requests.json'), JSON.stringify(mock.requests, null, 1));
     await gw.stop();
@@ -115,12 +120,10 @@ const sameLines = (a: CartLine[], b: Array<{ name: string; qty: number }>) =>
   JSON.stringify([...a].filter((l) => l.qty > 0).map((l) => [l.name, l.qty]).sort()) === JSON.stringify([...b].map((l) => [l.name, l.qty]).sort());
 
 /** The order flow: question, answer, then the bot's link. Returns the final message. */
-async function order(w: World, answer: string, opts: { mismatchFix?: boolean } = {}): Promise<string> {
+async function order(w: World, answer: string): Promise<string> {
   const question = await say(w, 'хочу замовити', isQuestion, 'the product question');
   check(w.name, 'COS relays the product question word for word', question.includes(`${w.rows.get(FILLET)}. ${FILLET}`));
-  if (!opts.mismatchFix) return say(w, answer, hasLink, 'the basket link');
-  await say(w, answer, (t) => t.includes('відрізняється'), 'the mismatch report');
-  return say(w, 'прибери зайве', hasLink, 'the basket link after the fix');
+  return say(w, answer, hasLink, 'the basket link');
 }
 
 async function verifyBasket(w: World, expected: Array<{ name: string; qty: number }>): Promise<void> {
@@ -148,10 +151,21 @@ const SCENARIOS: Record<string, { probes: Probes; run: (w: World) => Promise<voi
   B: {
     probes: { forbidden: false },
     async run(w) {
-      await w.chrome.withShopHelper(SHOP_BASE, HELPER_SOURCE, `window.__poo.setQty(${JSON.stringify(LIVER)}, 1)`);
-      const final = await order(w, `${w.rows.get(FILLET)}`, { mismatchFix: true });
-      check(w.name, 'the link comes after the fix and the re-check', hasLink(final));
+      const seedLiver = () => w.chrome.withShopHelper(SHOP_BASE, HELPER_SOURCE, `window.__poo.setQty(${JSON.stringify(LIVER)}, 1)`);
+      // A new order starts from an empty basket: Execute first removes what an earlier order left.
+      await seedLiver();
+      const first = await order(w, `${w.rows.get(FILLET)}`);
+      check(w.name, 'the new order gets the link without a mismatch', hasLink(first));
       await verifyBasket(w, [{ name: FILLET, qty: 1 }]);
+      const cleared = w.gw.tasks().some((t) => t.agent === 'execute' && (t.result as { cleared?: string[] } | undefined)?.cleared?.includes(LIVER));
+      check(w.name, 'Execute cleared the line of the earlier order', cleared);
+
+      // Adding to the current order keeps the basket: the extra line stays, QA reports it, and a fix removes it.
+      await seedLiver();
+      await say(w, `add ${w.rows.get(PASTE)}`, (t) => t.includes('відрізняється'), 'the mismatch report');
+      const final = await say(w, 'прибери зайве', hasLink, 'the basket link after the fix');
+      check(w.name, 'the link comes after the fix and the re-check', hasLink(final));
+      await verifyBasket(w, [{ name: FILLET, qty: 1 }, { name: PASTE, qty: 1 }]);
       const qaTasks = w.mock.requests.filter((r) => r.agent === 'qa' && JSON.stringify(r.body).includes(`\\"${LIVER}\\": must no longer be in the basket`));
       check(w.name, 'the re-check knows what to check (the extra line is gone)', qaTasks.length > 0);
     },
@@ -163,8 +177,19 @@ const SCENARIOS: Record<string, { probes: Probes; run: (w: World) => Promise<voi
       check(w.name, 'COS confirms the product list update', saved.startsWith('Збережено'));
       const skill = await readFile(path.join(w.gw.workspaceRoot, 'agents/explore/skills/ask-what-to-buy/SKILL.md'), 'utf8');
       check(w.name, 'the skill lists the new product', skill.includes(`| ${NEW_PRODUCT} |`));
+
+      // "save this": COS writes its memory, and every new order gets the product.
+      const remembered = await say(w, `save this - add ${FILLET} to every future order`, (t) => t.startsWith('Запам'), 'the memory confirmation');
+      check(w.name, 'COS confirms what it remembered', remembered.includes(FILLET), remembered);
+      const memory = await readFile(path.join(w.gw.workspaceRoot, 'agents/cos/MEMORY.md'), 'utf8');
+      check(w.name, "COS's MEMORY.md holds the every-order product", memory.includes(`- ${FILLET} × 1`), memory);
+
       const question = await say(w, 'хочу замовити', isQuestion, 'the product question');
       check(w.name, 'the next question lists the new product', /\d+\. Котлети по-київськи з індички, 900 г/.test(question));
+      check(w.name, 'the question says the saved product is always added', question.includes(`Завжди додається до замовлення: ${FILLET} × 1.`), question);
+      const final = await say(w, `${w.rows.get(PASTE)}`, hasLink, 'the basket link');
+      check(w.name, 'the order with the saved product gets the link', hasLink(final));
+      await verifyBasket(w, [{ name: FILLET, qty: 1 }, { name: PASTE, qty: 1 }]);
     },
   },
   D: {
@@ -193,6 +218,7 @@ const SCENARIOS: Record<string, { probes: Probes; run: (w: World) => Promise<voi
         check(w.name, `refused and recorded: ${label}`, found.length > 0, found[0]?.slice(0, 160));
       };
       await expectRefused('COS sends the basket link before verification', 'agent:cos:main', (a) => a.includes('{{cart_link}}'));
+      await expectRefused('COS writes a file other than its memory', 'agent:cos:main', (a) => a.startsWith('write ') && a.includes(PROBE.cosWrite));
       await expectRefused('Explore reads a file outside its skill', sessions.get('explore'), (a) => a.includes(PROBE.exploreRead));
       await expectRefused('Execute navigates to another site', sessions.get('execute'), (a) => a.includes(PROBE.executeNavigate));
       await expectRefused('Execute runs free JavaScript', sessions.get('execute'), (a) => a.includes('document.title'));

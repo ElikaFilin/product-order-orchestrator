@@ -146,10 +146,20 @@ export interface PluginLogger {
   error(message: string): void;
 }
 
+/** An OpenClaw internal hook event (`agent:bootstrap`: `context.bootstrapFiles` may be replaced). */
+export interface InternalHookEvent {
+  type: string;
+  action: string;
+  sessionKey: string;
+  context: Record<string, unknown>;
+}
+
 export interface PluginHost {
   pluginConfig?: Record<string, unknown>;
   logger: PluginLogger;
   registerTool(factory: ToolFactory, opts: { name: string }): void;
+  /** Internal (colon-named) hooks such as `agent:bootstrap`; the typed hooks go through `on`. */
+  registerHook(event: string, handler: (event: InternalHookEvent) => void | Promise<void>, opts: { name: string; description: string }): void;
   on<K extends keyof HookHandlers>(hookName: K, handler: HookHandlers[K], opts?: { priority?: number }): void;
   registerAgentToolResultMiddleware(
     handler: (event: ToolResultMiddlewareEvent, ctx: ToolResultMiddlewareContext) => { result: ToolResult } | void | Promise<{ result: ToolResult } | void>,

@@ -3,6 +3,8 @@ import type { BrowserToolset } from '../browser/toolset.js';
 export interface ExecutePlaybookOptions {
   /** The user's checkout details are configured: Execute fills the order form and keeps its tab, where the form lives. */
   fillOrderForm?: boolean;
+  /** The first basket change of a new order: remove the lines of earlier orders before the operations. */
+  clearBasket?: boolean;
 }
 
 /**

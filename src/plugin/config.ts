@@ -12,6 +12,8 @@ const seconds = (fallback: number) => z.number().int().min(30).max(3600).default
 export const PluginConfig = z.object({
   /** Absolute path of Explore's ask-what-to-buy SKILL.md (its product tables). */
   skillFile: z.string().min(1),
+  /** Absolute path of COS's MEMORY.md ("save this"): the only file COS may read and write. */
+  memoryFile: z.string().min(1).optional(),
   /** Numeric Telegram user id of the owner: COS may message only this chat. */
   telegramUserId: z.union([z.number().int(), z.string().regex(/^\d+$/)]).transform(String),
   shopId: z.string().min(1).default('karashynyard'),

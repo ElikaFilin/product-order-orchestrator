@@ -87,6 +87,17 @@ describe('OpenClaw config', () => {
     expect(extension.agents.defaults.skipBootstrap).toBe(true);
   });
 
+  it("gives COS its memory: MEMORY.md tools inside its workspace, owner turns, keyword search, no automatic notes", () => {
+    const cos = extension.agents.entries.cos;
+    expect(cos.tools.allow).toEqual(expect.arrayContaining(['read', 'write', 'edit', 'memory_search', 'memory_get']));
+    expect(cos.tools.fs).toEqual({ workspaceOnly: true });
+    for (const child of ['explore', 'execute', 'qa']) expect(extension.agents.entries[child].tools.allow).not.toContain('write');
+    expect(extension.commands).toEqual({ ownerAllowFrom: ['telegram:111222333'] });
+    expect(extension.memory).toEqual({ search: { provider: 'none' } });
+    expect(extension.agents.defaults.compaction).toEqual({ memoryFlush: { enabled: false } });
+    expect(parsePluginConfig(extension.plugins.entries['product-order-orchestrator'].config).memoryFile).toBe(path.join(REPO, 'agents/cos/MEMORY.md'));
+  });
+
   it('passes the order form details to the plugin only when they are set', () => {
     const checkout = { name: 'Тарас Тестовий', phone: '+380671234567', delivery: 'Доставка Новою поштою', address: 'вул. Тестова 1, Київ' };
     const withForm = buildOpenClawConfig({ ...options({ mode: 'extension', profileDir: 'Default' }), checkout }) as any;

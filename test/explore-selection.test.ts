@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canonicalizeSelection, productQuestion, QUESTION_HEAD, selectionFromRows } from '../src/core/explore/selection.js';
+import { canonicalizeSelection, productQuestion, QUESTION_HEAD, resolveStanding, selectionFromRows, withStanding } from '../src/core/explore/selection.js';
 
 const PASTE = 'Горіхова паста з фунндуком 350 г';
 const KYIV = 'Котлети по-київськи з індички, 900 г';
@@ -15,6 +15,31 @@ describe('productQuestion', () => {
     expect(productQuestion(products)).toBe(
       [QUESTION_HEAD, 'Наприклад:', '1 - 2', '5', '', `1. ${FILLET} — ≈665 грн`, `2. ${PASTE} — ≈850 грн`, `3. ${KYIV}`].join('\n'),
     );
+  });
+});
+
+describe('every-order (standing) products', () => {
+  it('the question says they are always added', () => {
+    const question = productQuestion(products, [{ name: FILLET, qty: 1 }]).split('\n');
+    expect(question.slice(0, 2)).toEqual([QUESTION_HEAD, `Завжди додається до замовлення: ${FILLET} × 1. Якщо більше нічого не треба, напишіть «0».`]);
+  });
+
+  it('resolves names to the exact list names and SKUs, and refuses names the list does not have', () => {
+    expect(resolveStanding([{ name: ` ${FILLET.toUpperCase()} `, qty: 1 }], products)).toEqual([{ name: FILLET, qty: 1, sku: '1' }]);
+    expect(() => resolveStanding([{ name: 'Шоколад', qty: 1 }], products)).toThrow(/Not in the product list: Шоколад/);
+  });
+
+  it('adds them to the selection: a product the user chose too adds up, nothing chosen means only them', () => {
+    const chosen = selectionFromRows('karashynyard', [{ row: 1, name: FILLET, qty: 2 }, { row: 2, name: PASTE, qty: 1 }], products);
+    const standing = [{ name: FILLET, qty: 1, sku: '1' }];
+    const selection = withStanding(chosen, standing, products);
+    expect(selection.items).toEqual([
+      { name: FILLET, qty: 3, sku: '1' },
+      { name: PASTE, qty: 1, sku: '513' },
+    ]);
+    expect(selection.notes).toBe(`Added to every order: ${FILLET} × 1.`);
+    expect(withStanding(selectionFromRows('karashynyard', [], products), standing, products).items).toEqual(standing);
+    expect(withStanding(chosen, [], products)).toBe(chosen);
   });
 });
 

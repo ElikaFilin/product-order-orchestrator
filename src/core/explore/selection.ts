@@ -11,9 +11,16 @@ export const QUESTION_HEAD =
  * The select-products question, rendered in code from the product table: the numbers the user answers with
  * are the table rows, so the answer maps back to exact names without the model copying a 20-line list.
  */
-export function productQuestion(products: readonly Product[]): string {
+export function productQuestion(products: readonly Product[], standing: readonly BasketItem[] = []): string {
+  const always = standing.length
+    ? [
+        `Завжди додається до замовлення: ${standing.map((i) => `${i.name} × ${i.qty}`).join('; ')}. ` +
+          'Якщо більше нічого не треба, напишіть «0».',
+      ]
+    : [];
   return [
     QUESTION_HEAD,
+    ...always,
     'Наприклад:',
     '1 - 2',
     '5',
@@ -94,4 +101,29 @@ export function canonicalizeSelection(selection: Selection, products: readonly P
     .filter(Boolean)
     .join('\n');
   return { type: 'selection', shopId: selection.shopId, items: [...lines.values()], ...(notes ? { notes } : {}) };
+}
+
+/**
+ * COS's every-order products (from its memory) as exact product-list names. A name the list does not have is
+ * refused: Execute could not find it in the shop either.
+ */
+export function resolveStanding(items: ReadonlyArray<{ name: string; qty: number }>, products: readonly Product[]): BasketItem[] {
+  const resolved = canonicalizeSelection({ type: 'selection', shopId: '', items: items.map(({ name, qty }) => ({ name, qty })) }, products);
+  const listed = new Set(products.map((p) => normalizeName(p.name)));
+  const unknown = resolved.items.filter((i) => !listed.has(normalizeName(i.name))).map((i) => i.name);
+  if (unknown.length) {
+    throw new Error(
+      `Not in the product list: ${unknown.join('; ')}. Start the task without them and tell the user; a product goes into ` +
+        'every order only once it is in the product list (explore update-product-list).',
+    );
+  }
+  return resolved.items;
+}
+
+/** A new order's selection plus the products the user wants in every order (quantities of a product chosen too add up). */
+export function withStanding(selection: Selection, standing: readonly BasketItem[], products: readonly Product[]): Selection {
+  if (standing.length === 0) return selection;
+  const note = `Added to every order: ${standing.map((i) => `${i.name} × ${i.qty}`).join('; ')}.`;
+  const notes = [selection.notes, note].filter(Boolean).join('\n');
+  return canonicalizeSelection({ ...selection, items: [...selection.items, ...standing], notes }, products);
 }

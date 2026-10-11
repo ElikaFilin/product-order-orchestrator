@@ -30,7 +30,7 @@ flowchart LR
 
 | Agent | Workspace | Model | Tools it can call | Cannot |
 |---|---|---|---|---|
-| cos | `agents/cos/` | `anthropic/claude-opus-5-5` | `message` (your chat only), `sessions_spawn`, `sessions_yield`, `sessions_send`, `subagents`, `poo_task`, `poo_task_status`, `poo_answer`, `poo_order_state`, `poo_accept_items`, `poo_new_order`, `poo_cancel` | browser, product list, files, shell, web |
+| cos | `agents/cos/` | `anthropic/claude-opus-5-5` | `message` (your chat only), `sessions_spawn`, `sessions_yield`, `sessions_send`, `subagents`, `read` / `write` / `edit` (its `MEMORY.md` only), `memory_search`, `memory_get`, `poo_task`, `poo_task_status`, `poo_answer`, `poo_order_state`, `poo_accept_items`, `poo_new_order`, `poo_cancel` | browser, product list, other files, shell, web |
 | explore | `agents/explore/` | `anthropic/claude-sonnet-5-5` | `read` (its skill file only), `poo_ask_user`, `poo_update_product_list`, `poo_submit_selection` | messaging, browser |
 | execute | `agents/execute/` | `anthropic/claude-sonnet-5-5` | `playwright__browser_{tabs,navigate,snapshot,wait_for,evaluate,take_screenshot,console_messages}`, `poo_ask_user`, `poo_submit_execute` | messaging, clicking, typing, sending the order |
 | qa | `agents/qa/` | `anthropic/claude-sonnet-5-5` | the Execute browser tools plus `playwright__browser_click` (basket icon only), `poo_ask_user`, `poo_submit_qa` | messaging, changing the basket |
@@ -44,6 +44,12 @@ How it is enforced (`src/openclaw/config.ts` generates the config, `src/plugin/`
   `tools.sessions.visibility: "tree"`: COS reaches only its own children. Children never get `message`.
 - `tools.codeMode` and `tools.toolSearch` are off, the built-in `browser` plugin is disabled, the skill workshop and
   memory dreaming are off, and `skipBootstrap` keeps OpenClaw's persona files out of the workspaces.
+- **COS's memory** is `agents/cos/MEMORY.md` (git-ignored; the plugin creates it from a template). OpenClaw re-reads it
+  into COS's system prompt on every turn (`skipBootstrap` only stops file creation). COS changes it with `write` /
+  `edit` and searches it with `memory_search` / `memory_get` (keyword ranking, `memory.search.provider: "none"`). The
+  plugin refuses any other path for COS's `read` / `write` / `edit`, and `tools.fs.workspaceOnly` backs that up.
+  `commands.ownerAllowFrom` names your Telegram id: OpenClaw keeps MEMORY.md in the prompt only when it was written in
+  an owner turn. The pre-compaction memory flush is off, so the file holds only what you saved.
 - Telegram is bound to `cos` only, `dmPolicy: "allowlist"` with your id; `messages.visibleReplies: "message_tool"`
   keeps COS's plain text private, so you see only what it sends with `message`. Messages you write while COS works
   queue (`followup`).
@@ -82,6 +88,16 @@ How it is enforced (`src/openclaw/config.ts` generates the config, `src/plugin/`
   window, nothing changed since, and nothing differs.
 - **Context**: every COS turn gets `<order_state>`, `<subagent_tasks>` (state and `next` of each task) and
   `<pending_subagent_questions>` (with `received_at` and `relayed_at`).
+- **New order or change**: a new order's `poo_task explore` takes `standing`, the every-order products from COS's
+  memory. The plugin resolves them to exact product-list names (refusing unknown ones), the question says they are
+  always added, and `poo_submit_selection` adds them in code. The first `execute initial` of an order carries
+  `clearBasket`: Execute removes every basket line outside the order first, and `PageOps` records what it removed
+  (`cleared`). Later fills of the same order (products added with `merge`, the form filled again) and every `fix` keep
+  the basket.
+- **Workspace files**: COS's prompt gets its `AGENTS.md` (rules), `SOUL.md` (voice) and `MEMORY.md` on every turn;
+  sub-agent sessions get only their `AGENTS.md`. The `agent:bootstrap` internal hook leaves files that do not exist
+  out of our agents' prompts: `skipBootstrap` stops OpenClaw from creating persona files, but a missing `SOUL.md` or
+  `IDENTITY.md` would still appear as a `[MISSING] Expected at: …` line.
 - **Lifecycle**: `subagent_spawned` binds the child session to its task, `subagent_ended` settles a run that ended
   without a result, and `/new` (`before_reset`) clears the order and cancels its tasks.
 
@@ -96,7 +112,7 @@ sequenceDiagram
   participant X as Execute
   participant Q as QA
   U->>C: "хочу замовити"
-  C->>P: poo_task explore, sessions_spawn {task}
+  C->>P: poo_task explore (+ every-order products from MEMORY.md), sessions_spawn {task}
   P-->>E: task text with the product question
   E->>P: poo_ask_user (question), run ends
   C->>U: message @relay:<task> (the question, verbatim)
@@ -104,8 +120,8 @@ sequenceDiagram
   C->>P: poo_answer, sessions_send (same session)
   E->>P: poo_submit_selection (rows) → selection in the order
   C->>U: confirms the selection
-  C->>P: poo_task execute (whole expected basket)
-  X->>X: own tab, setQty per line (helper), readCart
+  C->>P: poo_task execute (whole expected basket, clearBasket on a new order)
+  X->>X: own tab, readCart, setQty 0 for lines of earlier orders, setQty per line (helper), readCart
   X->>X: fillOrderForm() (plugin writes the details), readOrderForm; tab stays open
   X->>P: poo_submit_execute → results and order form check from the page
   C->>P: poo_task qa (expected basket + re-checks)

@@ -32,6 +32,7 @@ export interface TaskInfo {
   agent: string;
   state: string;
   childSessionKey?: string;
+  result?: unknown;
 }
 
 export class E2eGateway {
@@ -50,8 +51,12 @@ export class E2eGateway {
   static async start(opts: GatewayOptions): Promise<E2eGateway> {
     const dir = (...p: string[]) => path.join(opts.workDir, ...p);
     for (const d of ['state', 'home', 'repo', 'playwright']) await mkdir(dir(d), { recursive: true });
-    // The workspaces (AGENTS.md, the skill) are copied: scenario C edits the product list.
-    await cp(path.join(opts.repoRoot, 'agents'), dir('repo', 'agents'), { recursive: true });
+    // The workspaces (AGENTS.md, the skill) are copied: scenario C edits the product list and COS's memory. The user's
+    // own memory and OpenClaw's files stay out: the plugin starts COS with an empty MEMORY.md.
+    await cp(path.join(opts.repoRoot, 'agents'), dir('repo', 'agents'), {
+      recursive: true,
+      filter: (src) => !/[\\/]agents[\\/][^\\/]+[\\/](?:MEMORY\.md|memory|\.openclaw)$/.test(src),
+    });
     const token = `e2e-${opts.port}-gateway-token-0123456789`;
     const config = buildE2eConfig(
       {

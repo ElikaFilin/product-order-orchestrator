@@ -99,6 +99,11 @@ describe('buildExecutePrompt', () => {
     expect(prompt).toContain('Instruction from the Chief of Staff:\nPlease hurry.');
   });
 
+  it('tells a new order to clear the basket first, and nothing else to', () => {
+    expect(buildExecutePrompt({ ...request([{ name: FILLET, targetQty: 1 }]), clearBasket: true }, SHOP, '')).toContain('New order: clear the basket first.');
+    expect(buildExecutePrompt(request([{ name: FILLET, targetQty: 1 }]), SHOP, '')).not.toContain('clear the basket');
+  });
+
   it('omits the instruction block when COS sent no text', () => {
     expect(buildExecutePrompt(request([{ name: FILLET, targetQty: 1 }]), SHOP, '  ')).not.toContain('Chief of Staff');
   });
@@ -234,6 +239,27 @@ describe('finalizeExecuteResult with page data', () => {
     const result = finalizeExecuteResult(req, reported, CART_URL, page);
     expect(result.ops).toEqual([{ name: FILLET, targetQty: 2, status: 'ok', actualQty: 2 }]);
     expect(result.cart).toEqual([{ name: FILLET, qty: 2 }]);
+  });
+
+  it('records the lines of earlier orders a new order cleared, and calls out what is left', () => {
+    const req = { ...request([{ name: FILLET, targetQty: 1 }]), clearBasket: true };
+    const page = pageOf([
+      ['window.__poo.readCart()', { lines: [{ name: LIVER, qty: 2 }, { name: EGGS, qty: 1 }, { name: FILLET, qty: 3 }], units: 6, total: 0 }],
+      [`window.__poo.setQty(${JSON.stringify(LIVER)}, 0)`, { status: 'ok', name: LIVER, before: 2, after: 0 }],
+      [`window.__poo.setQty(${JSON.stringify(EGGS)}, 0)`, { status: 'failed', name: EGGS, before: 1, after: 1, detail: 'Tilda ignored the delete' }],
+      [`window.__poo.setQty(${JSON.stringify(FILLET)}, 1)`, { status: 'ok', name: FILLET, before: 3, after: 1 }],
+      ['window.__poo.readCart()', { lines: [{ name: EGGS, qty: 1 }, { name: FILLET, qty: 1 }], units: 2, total: 0 }],
+    ]);
+    // The model also reported its clearing calls: expected for a new order, so no note about them.
+    const reported = report({ ops: [{ name: LIVER, targetQty: 0, status: 'ok' }, { name: FILLET, targetQty: 1, status: 'ok' }] });
+    const result = finalizeExecuteResult(req, reported, CART_URL, page);
+    expect(result.ops).toEqual([{ name: FILLET, targetQty: 1, status: 'ok', actualQty: 1 }]);
+    expect(result.cleared).toEqual([LIVER]);
+    expect(result.notes).toBeUndefined();
+    const summary = summarizeExecute('initial', result, true);
+    expect(summary).toContain(`Cleared first (lines of earlier orders): ${LIVER}.`);
+    expect(summary).toContain(`Not cleared (still in the basket, not in this order): ${EGGS}.`);
+    expect(summarizeExecute('initial', result)).not.toContain('Not cleared');
   });
 
   it('reports not_found with the closest names the helper gave', () => {

@@ -7,11 +7,11 @@ payment stay with you: the agents never place an order.
 The agents run inside one [OpenClaw](https://github.com/openclaw/openclaw) gateway (2026.9.9, pinned in this repo), so
 its Control UI shows every agent's sessions, tool calls, sub-agent runs, statuses and errors:
 
-- **COS (Chief of Staff)** is the only agent that talks to you, in your Telegram chat. It plans the work and starts
-  the other agents as OpenClaw sub-agents.
+- **COS (Chief of Staff)** is the only agent that talks to you, in your Telegram chat. It plans the work, starts
+  the other agents as OpenClaw sub-agents, and remembers what you save with "save this" (its `MEMORY.md`).
 - **Explore** owns your product list (an OpenClaw skill) and asks you which products to buy and how many.
-- **Execute** fills the basket in your browser through Playwright MCP and the Playwright Extension, then the order
-  form (name, phone, delivery, address) when your details are in `.env`.
+- **Execute** fills the basket in your browser through Playwright MCP and the Playwright Extension (a new order
+  starts from an empty basket), then the order form (name, phone, delivery, address) when your details are in `.env`.
 - **QA** opens the basket the way you do, reads it and reports any differences.
 
 Every rule is enforced in code by this repo's OpenClaw plugin (`src/plugin/`): which tools each agent may call, the
@@ -35,6 +35,8 @@ secrets live only in this repo's `.env`. Nothing is installed globally and `~/.o
 | OpenClaw state | `.runtime/openclaw/state/` (sessions, transcripts); the order and tasks: `.runtime/openclaw/state/product-order-orchestrator/state.json`. |
 | Agent instructions | `agents/<agent>/AGENTS.md` (the OpenClaw workspaces are these folders). |
 | Your product list | `agents/explore/skills/ask-what-to-buy/SKILL.md` (change it from Telegram with "save info"). |
+| The bot's memory | `agents/cos/MEMORY.md` (change it from Telegram with "save this"; not in git). |
+| The bot's voice | `agents/cos/SOUL.md` (tone and style of COS's messages; the rules stay in `AGENTS.md`). |
 | Browser snapshots | `.runtime/playwright/`. |
 
 ## Run it on a new computer
@@ -149,8 +151,69 @@ Bot:  (what is in the basket) and the link
 
 - **Answer format:** one product per line, `номер - кількість` (`1 - 2`, `1-2`, `1 x 2` also work). A number alone
   means one item (`5`). If a line is unclear, Explore asks about that line once.
-- **Adding later:** "і ще 5" or "also 3 - 2" after the selection adds those products to the current order
-  (quantities of a product already in it add up). To change or remove a product, just say so.
+
+### Messages the bot understands
+
+Copy them as they are; product numbers are the ones in the bot's question, product names are copied from it.
+
+**Start a new order.** The basket starts empty: if it still holds products from an earlier order, Execute removes
+them first. Products saved "for every order" (see below) are added automatically, and the question says which.
+
+```text
+хочу замовити
+```
+
+```text
+нове замовлення
+```
+
+```text
+new order
+```
+
+**Change the current order.** The basket is kept as it is; only the products you name change. This works until you
+start a new order, also after the bot sent the link. After you have sent an order in the shop, start the next one with
+`хочу замовити`, not with `add`.
+
+| What | Message |
+|---|---|
+| Add products (numbers from the question) | `add 5 - 2` · `додай 17` · `і ще 3 - 1` |
+| Add a product by name | `add Натуральний фермерський мед, 1 л` |
+| Change a quantity | `change Філе зі стегна індички, 1 кг to 3` · `зміни Філе зі стегна індички, 1 кг на 3` |
+| Remove a product | `remove Печінка індички, 500 г` · `прибери Печінка індички, 500 г` |
+
+`add` adds to what is already there (quantities of a product already in the order add up); `change` sets the exact
+quantity. QA checks the basket again after every change, and the bot sends the link again.
+
+**Save a preference (the bot's memory).** `save this - ...` is written to COS's memory, the file
+`agents/cos/MEMORY.md`, and applies to every future order until you change it:
+
+| What | Message |
+|---|---|
+| A product in every new order | `save this - add Філе зі стегна індички, 1 кг to every future order` |
+| With a quantity | `save this - add Масло ГХІ, 470 мл × 2 to every future order` |
+| Stop adding it | `save this - stop adding Філе зі стегна індички, 1 кг to every order` |
+| See what is saved | `what do you remember?` · `що ти пам'ятаєш?` |
+
+A product saved for every order must be in your product list (copy its name from the bot's question). The next
+question then starts with «Завжди додається до замовлення: Філе зі стегна індички, 1 кг × 1». Choose more products as
+usual, or answer `0` if you want only the saved ones. If you choose the same product too, the quantities add up.
+"For every order" applies only when you start a new order, never when you add to the current one.
+
+**Change the product list** (the products the bot offers):
+
+```text
+save info - add "Печінка індички, 500 г" to product list selection
+```
+
+```text
+save info - remove "Печінка індички, 500 г" from product list
+```
+
+The next order question includes the change.
+
+### While an order runs
+
 - **Writing while the agents work:** your messages queue and COS reads them when the current step finishes. A message
   written before a question was asked is not taken as the answer to it.
 - **Differences:** if QA finds a difference (a product missing, an extra one, a wrong quantity), the bot lists it
@@ -163,8 +226,6 @@ Bot:  (what is in the basket) and the link
   empty form. The plugin reads the fields back from Execute's tab and checks them in code; QA's report carries that
   check, and the link goes out only when the form holds your details. Check the form there and press
   "Відправити замовлення" yourself.
-- **Product list:** `save info - add "Печінка індички, 500 г" to product list selection` adds a product,
-  `save info - remove "<product>" from product list` removes one. The next order question includes the change.
 - **Commands (OpenClaw):** `/new` starts a new order (the plugin clears the order), `/stop` stops the running
   agents, `/status` shows the session, `/subagents list` lists the sub-agent runs.
 
@@ -218,7 +279,8 @@ The Control UI (`pnpm dashboard`) is the dashboard:
 - **Only you.** Telegram is bound to COS alone and accepts only `TELEGRAM_ALLOWED_USER_ID`. COS may message only your
   chat; sub-agents have no messaging tool at all.
 - **Locked-down agents.** Each agent has an explicit tool allow-list (no shell, files, web or built-in browser), and
-  the plugin refuses anything else in code. Explore may read only its skill file.
+  the plugin refuses anything else in code. Explore may read only its skill file; COS may read and change only its
+  `MEMORY.md`.
 - **Secrets** live only in `.env`, which git ignores; the generated config holds `${VAR}` references, and the
   extension token goes only to the Playwright MCP server. Your order form details are in `.env` too; the generated
   config (`.runtime/`, also ignored) holds them as values.
@@ -251,11 +313,13 @@ Telegram Bot API, so it needs no keys and spends nothing. Each scenario gets a t
 profile, driving the live shop; the basket lives only in that profile and the order form is never touched. Scenarios:
 
 - A: order, question, selection, fill, QA match, link.
-- B: an extra line in the basket, a QA mismatch, "прибери зайве", a fix, a focused re-check, the link.
-- C: `save info - add ...`, the skill updated, the next question lists the product.
-- D: forbidden calls (the link before verification, a file outside the skill, another site, free JavaScript, the
-  order form, a click from Execute, a basket write from QA, a sub-agent messaging the user) are refused and recorded
-  in the session transcripts.
+- B: a new order clears what an earlier order left in the basket; then `add ...` keeps the basket, so an extra line
+  causes a QA mismatch, "прибери зайве", a fix, a focused re-check, the link.
+- C: `save info - add ...` updates the skill; `save this - add ... to every future order` updates COS's `MEMORY.md`;
+  the next question lists the new product and says the saved one is always added, and the basket holds it.
+- D: forbidden calls (the link before verification, COS writing a file other than its memory, a file outside the
+  skill, another site, free JavaScript, the order form, a click from Execute, a basket write from QA, a sub-agent
+  messaging the user) are refused and recorded in the session transcripts.
 
 The workspaces are copied, so the real `SKILL.md` never changes. `-- --only A,C` runs a subset; `E2E_WORK_DIR` keeps
 the logs, transcripts and `report.json`; `CHROME_PATH` and `E2E_PORT_FROM`/`E2E_PORT_TO` adjust the browser and ports.

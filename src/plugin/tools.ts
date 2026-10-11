@@ -8,7 +8,7 @@ import { Type, type Static, type TSchema } from 'typebox';
 import { SUB_AGENTS, type SubAgentName } from '../core/agents.js';
 import type { ExecuteResult, ProductListUpdate } from '../core/contracts.js';
 import { finalizeExecuteResult, summarizeExecute } from '../core/execute/result.js';
-import { selectionFromRows } from '../core/explore/selection.js';
+import { resolveStanding, selectionFromRows, withStanding } from '../core/explore/selection.js';
 import { describeDifference } from '../core/order-state.js';
 import { summarizeQa, toQaResult, QaObservation } from '../core/qa/report.js';
 import { getShop } from '../core/shops/index.js';
@@ -26,6 +26,9 @@ export const COS_TOOLS = [
   'poo_new_order',
   'poo_cancel',
 ] as const;
+
+/** OpenClaw tools for COS's memory: file tools limited to MEMORY.md by the plugin, and memory-core's search and read. */
+export const COS_MEMORY_TOOLS = ['read', 'write', 'edit', 'memory_search', 'memory_get'] as const;
 
 /** Child tools and the agent that may call each. */
 export const CHILD_TOOLS = {
@@ -98,21 +101,29 @@ export function registerTools(host: PluginHost, rt: Runtime): void {
     description:
       'Create a sub-agent task. Its request (selection, expected basket, operations, QA re-checks) is built from the order ' +
       'state automatically. Then start it with sessions_spawn {agentId, task: <taskId>}. explore: select-products (default; ' +
-      'merge:true when the user adds products to the current order) | update-product-list (add/remove). execute: initial ' +
+      'merge:true when the user adds products to the current order; standing: the every-order products from your memory, new ' +
+      'orders only) | update-product-list (add/remove). execute: initial ' +
       '(default, the whole expected basket) | fix (ops). qa: verify (default; re-checks of the last fix are added automatically).',
     parameters: Type.Object({
       agent: Type.Enum([...SUB_AGENTS]),
       instruction: Type.String({ description: 'Short plain-language instruction with any user wishes or context' }),
       action: Type.Optional(Type.Enum([...DELEGATE_ACTIONS])),
       merge: Type.Optional(Type.Boolean({ description: 'explore select-products: the user adds products to the current order' })),
+      standing: Type.Optional(
+        Type.Array(Type.Object({ name: Name, qty: Type.Integer({ minimum: 1, maximum: 99 }) }), {
+          description: 'explore select-products, new order only: the products your memory says go into every order, with quantities',
+        }),
+      ),
       ops: Type.Optional(Type.Array(BasketOpSchema, { description: 'execute fix: absolute target quantities; 0 removes the line' })),
       add: Type.Optional(Type.Array(Name, { description: 'explore update-product-list: products to add, as the user wrote them' })),
       remove: Type.Optional(Type.Array(Name, { description: 'explore update-product-list: products to remove' })),
       focus: Type.Optional(Type.Array(QaFocusSchema, { description: 'qa: extra checks the user asked for' })),
     }),
-    run: (params) =>
-      store.update(() => {
-        const args = params as TaskArgs;
+    run: async (params) => {
+      const { standing: wanted, ...rest } = params;
+      const standing = wanted?.length ? resolveStanding(wanted, await rt.productList.read(store.order.shopId)) : undefined;
+      return store.update(() => {
+        const args: TaskArgs = { ...(rest as Omit<TaskArgs, 'standing'>), ...(standing ? { standing } : {}) };
         const busy = store.activeTasks().find((t) => t.agent === args.agent || (args.agent !== 'explore' && t.agent !== 'explore'));
         if (busy) {
           throw new Error(
@@ -121,7 +132,8 @@ export function registerTools(host: PluginHost, rt: Runtime): void {
           );
         }
         return report(store.createTask(args.agent, buildRequest(store.order, args), args.instruction));
-      }),
+      });
+    },
   });
 
   register(host, {
@@ -270,7 +282,9 @@ export function registerTools(host: PluginHost, rt: Runtime): void {
   register(host, {
     name: 'poo_submit_selection',
     agents: CHILD_TOOLS.poo_submit_selection,
-    description: 'Submit the products the user chose, by table row, as the result of a select-products task.',
+    description:
+      'Submit the products the user chose, by table row, as the result of a select-products task. When the task has ' +
+      'every-order products, code adds them; submit no items if the user wants nothing else.',
     parameters: Type.Object({
       outcome: Type.Enum(['selected', 'canceled'], { description: '"canceled" only when the user confirmed they want nothing' }),
       items: Type.Array(
@@ -291,9 +305,10 @@ export function registerTools(host: PluginHost, rt: Runtime): void {
         store.update(() => store.touch(task, { state: 'failed', error: { code: 'CANCELED', message }, summary: message }));
         return text(done(message));
       }
-      if (items.length === 0) throw new Error('Select at least one product, or submit outcome "canceled".');
+      const standing = request.standing ?? [];
+      if (items.length === 0 && standing.length === 0) throw new Error('Select at least one product, or submit outcome "canceled".');
       const products = await rt.productList.read(request.shopId);
-      const selection = selectionFromRows(request.shopId, items, products, notes);
+      const selection = withStanding(selectionFromRows(request.shopId, items, products, notes), standing, products);
       const lines = selection.items.map((i) => `${i.name} × ${i.qty}`).join('; ');
       const summary = `Selected ${selection.items.length} product(s): ${lines}.${selection.notes ? ` Notes: ${selection.notes}` : ''}`;
       store.update(() => {
@@ -336,7 +351,7 @@ export function registerTools(host: PluginHost, rt: Runtime): void {
           ...(notes ? { notes } : {}),
         };
         const result = finalizeExecuteResult(request, reported, shop.cartUrl, rt.pageOps.get(task.id), rt.config.checkout);
-        const summary = summarizeExecute(request.mode, result);
+        const summary = summarizeExecute(request.mode, result, request.clearBasket === true);
         store.order.applyExecuteResult(result, request.mode);
         store.touch(task, { state: 'completed', result, summary });
         return text(done(summary));

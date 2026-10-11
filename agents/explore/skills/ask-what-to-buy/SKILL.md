@@ -41,8 +41,10 @@ metadata:
 5. Follow-up, at most one:
    - Some lines invalid or ambiguous: call `poo_ask_user` once about those lines only (quote each line, say what is wrong, suggest the likely meaning). Keep the valid lines. If the reply is still unclear, drop those lines and mention them in the notes. A quantity over 20 that the user confirms is accepted (up to 99).
    - Nothing valid selected (empty answer, «нічого», «0», only invalid lines): call `poo_ask_user` with «Нічого не вибрано. Скасувати замовлення? Напишіть «так» або надішліть номери ще раз.». «так» (or «скасувати», «cancel») ends the task: submit outcome `canceled`; new numbers are read as in step 3.
+   - Exception: the task lists every-order products. Then «0» or «нічого» means only those products: submit outcome `selected` with no items, without asking. Only «скасувати» or «cancel» cancels the order.
 6. Call `poo_submit_selection` with the selected items: for each one the table row (`#`, the number the user
-   chose), the product name copied character for character from that row, and the quantity.
+   chose), the product name copied character for character from that row, and the quantity. Every-order products
+   (when the task lists them) are added by code: never submit them yourself.
 
 ## B. update-product-list
 

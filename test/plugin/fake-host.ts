@@ -7,6 +7,7 @@ import type {
   AgentContext,
   BeforeToolCallResult,
   HookHandlers,
+  InternalHookEvent,
   PluginHost,
   ToolContext,
   ToolFactory,
@@ -42,6 +43,19 @@ export class FakeHost implements PluginHost {
 
   registerAgentToolResultMiddleware(handler: Middleware): void {
     this.middleware.push(handler);
+  }
+
+  readonly internalHooks = new Map<string, Array<(event: InternalHookEvent) => void | Promise<void>>>();
+
+  registerHook(event: string, handler: (event: InternalHookEvent) => void | Promise<void>): void {
+    this.internalHooks.set(event, [...(this.internalHooks.get(event) ?? []), handler]);
+  }
+
+  /** Fire an internal hook like the gateway does; returns the (possibly replaced) event context. */
+  async internal(type: string, action: string, sessionKey: string, context: Record<string, unknown>): Promise<Record<string, unknown>> {
+    const event: InternalHookEvent = { type, action, sessionKey, context };
+    for (const h of this.internalHooks.get(`${type}:${action}`) ?? []) await h(event);
+    return event.context;
   }
 
   /** The tools a run of this agent would see (factories that return a tool). */

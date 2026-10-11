@@ -36,6 +36,8 @@ export const ExploreRequest = z.discriminatedUnion('action', [
     shopId: ShopId,
     /** The user adds products to an order that already has a selection: the result is added to it, not replacing it. */
     merge: z.boolean().optional(),
+    /** A new order only: products the user asked to have in every order (COS's memory), added to the selection in code. */
+    standing: z.array(BasketItem).optional(),
   }),
   z.object({
     type: z.literal('explore-request'),
@@ -106,6 +108,8 @@ export const ExecuteRequest = z.object({
   shopId: ShopId,
   mode: z.enum(['initial', 'fix']),
   ops: z.array(BasketOp).min(1),
+  /** The first basket change of a new order: remove every basket line that is not in `ops` before the operations. */
+  clearBasket: z.boolean().optional(),
 });
 export type ExecuteRequest = z.infer<typeof ExecuteRequest>;
 
@@ -123,6 +127,8 @@ export const ExecuteResult = z.object({
     }),
   ),
   cart: z.array(CartLine).default([]),
+  /** clearBasket: the lines of earlier orders the page removed before the operations. */
+  cleared: z.array(z.string()).optional(),
   /** Present when the user's checkout details are configured: Execute filled the order form in its tab. */
   orderForm: OrderFormCheck.optional(),
   notes: z.string().optional(),

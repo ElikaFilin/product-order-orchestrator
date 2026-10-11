@@ -16,6 +16,7 @@ export interface Probes {
 
 export const PROBE = {
   cosCartLink: 'Ось кошик: {{cart_link}}',
+  cosWrite: 'AGENTS.md',
   exploreRead: '../../.env',
   executeNavigate: 'https://example.com/',
   executeFreeJs: '() => document.title',
@@ -209,8 +210,22 @@ export function parseProductTable(text: string, shopId: string): Product[] {
 export const QUESTION_HEAD =
   'Що замовити? Напишіть номер товару і кількість, кожен товар з нового рядка, у форматі «номер - кількість». Без кількості = 1 шт.';
 
-export function productQuestion(products: readonly Product[]): string {
-  return [QUESTION_HEAD, 'Наприклад:', '1 - 2', '5', '', ...products.map((p) => `${p.n}. ${p.name}${p.price ? ` — ≈${p.price} грн` : ''}`)].join('\n');
+export interface Item {
+  name: string;
+  qty: number;
+}
+
+export function productQuestion(products: readonly Product[], standing: readonly Item[] = []): string {
+  const always = standing.length
+    ? [`Завжди додається до замовлення: ${standing.map((i) => `${i.name} × ${i.qty}`).join('; ')}. Якщо більше нічого не треба, напишіть «0».`]
+    : [];
+  return [QUESTION_HEAD, ...always, 'Наприклад:', '1 - 2', '5', '', ...products.map((p) => `${p.n}. ${p.name}${p.price ? ` — ≈${p.price} грн` : ''}`)].join('\n');
+}
+
+/** "- <name> × <qty>" lines of a "## Every order" section (COS's MEMORY.md in its system prompt). */
+function everyOrder(text: string): Item[] {
+  const section = text.match(/(?:^|\n)## Every order\n([\s\S]*?)(?:\n## |$)/)?.[1] ?? '';
+  return [...section.matchAll(/^- (.+) × (\d+)$/gm)].map((m) => ({ name: m[1]!, qty: Number(m[2]) }));
 }
 
 /** The skill's answer format: "N - Q", "N x Q", "N" (= 1); lines, commas and semicolons separate items. */
@@ -350,6 +365,15 @@ function cosScript(c: Conversation, r: Replay, probes: Probes): never {
     const delivered = r.call('sessions_send', send);
     return follow(json(delivered) as never);
   }
+  if (/^save this/i.test(said)) {
+    const m = said.match(/add\s+(.+?)(?:\s+×\s+(\d+))?\s+to every (?:future )?order/i);
+    if (!m) throw new Error(`COS cannot read what to remember in: ${said}`);
+    const line = `- ${m[1]} × ${m[2] ?? 1}`;
+    const edited = r.call('edit', { path: 'MEMORY.md', edits: [{ oldText: '## Every order\n', newText: `## Every order\n\n${line}\n` }] });
+    if (edited.isError) throw new Error(`COS could not edit its memory: ${edited.text}`);
+    say(`Запам'ятав: ${m[1]} × ${m[2] ?? 1} буде в кожному новому замовленні.`);
+    return r.end('Saved to memory.');
+  }
   if (/save info/i.test(said)) {
     const product = said.match(/add\s+"?(.+?)"?\s+to product list/i)?.[1];
     if (!product) throw new Error(`COS cannot read the product in: ${said}`);
@@ -362,12 +386,17 @@ function cosScript(c: Conversation, r: Replay, probes: Probes): never {
     const ops = (status.differences as Array<{ name: string; expectedQty: number }>).map((d) => ({ name: d.name, targetQty: d.expectedQty }));
     return start('execute', { action: 'fix', ops, instruction: said }, 'Виправляю кошик.');
   }
+  if (/^(?:add|додай)\s/i.test(said)) return start('explore', { merge: true, instruction: said }, 'Додаю до замовлення.');
   if (/хочу замовити/i.test(said)) {
     if (probes.forbidden) {
       const link = r.call('message', { action: 'send', message: PROBE.cosCartLink });
       if (!link.isError) throw new Error('the basket link went out before verification');
+      const file = r.call('write', { path: PROBE.cosWrite, content: 'overwritten' });
+      if (!file.isError) throw new Error('COS wrote a file other than its memory');
     }
-    return start('explore', { instruction: said }, 'Зараз запитаю, що замовити.');
+    // Every-order products come from COS's memory, which OpenClaw puts into its system prompt.
+    const standing = everyOrder(c.system);
+    return start('explore', { instruction: said, ...(standing.length ? { standing } : {}) }, 'Зараз запитаю, що замовити.');
   }
   say('Напишіть «хочу замовити», щоб почати.');
   return r.end('Answered small talk.');
@@ -395,9 +424,22 @@ function exploreScript(c: Conversation, r: Replay, probes: Probes): never {
     return r.end(`Product list updated: added ${(json(res).added as string[]).join('; ') || 'nothing'}.`);
   }
 
+  // Merge: COS's message names the products to add ("add 5 - 2"), so they are read without asking.
+  const adding = /^Merge: /m.test(task) ? task.match(/Message from the Chief of Staff:\n(?:add|додай)\s+(.+)/i)?.[1] : undefined;
+  if (adding) {
+    const res = r.call('poo_submit_selection', { outcome: 'selected', items: parseSelection(adding, products) });
+    if (res.isError) throw new Error(`poo_submit_selection failed: ${res.text}`);
+    return r.end(summaryOf(res));
+  }
+
   const question = fenced(task, 'Send it with poo_ask_user word for word');
   if (!question) throw new Error('explore task without the rendered product question');
-  if (question !== productQuestion(products)) throw new Error('the rendered question does not match the skill table');
+  const standing = (task.match(/^Every-order products: (.+?)\. The user asked/m)?.[1] ?? '')
+    .split('; ')
+    .filter(Boolean)
+    .map((item) => item.match(/^(.+) × (\d+)$/)!)
+    .map((m) => ({ name: m[1]!, qty: Number(m[2]) }));
+  if (question !== productQuestion(products, standing)) throw new Error('the rendered question does not match the skill table');
   r.call('poo_ask_user', { question });
   const askedAt = c.calls.find((x) => x.name === 'poo_ask_user')!.msgIndex;
   const answered = c.laterTexts(askedAt, 'The user answered your question').at(-1);
@@ -470,7 +512,13 @@ function executeScript(c: Conversation, r: Replay, probes: Probes): never {
       if (!r.call(tool, input).isError) throw new Error(`execute was allowed ${tool} ${JSON.stringify(input)}`);
     }
   }
-  evaluate<StoredCart>('window.__poo.readCart()');
+  const before = evaluate<StoredCart>('window.__poo.readCart()');
+  if (task.includes('New order: clear the basket first.')) {
+    const wanted = new Set(ops.map((op) => op.name));
+    for (const line of before?.lines ?? []) {
+      if (!wanted.has(line.name)) evaluate<SetQtyResult>(`window.__poo.setQty(${JSON.stringify(line.name)}, 0)`);
+    }
+  }
   const results = new Map<string, SetQtyResult | undefined>();
   for (const op of ops) {
     const call = `window.__poo.setQty(${JSON.stringify(op.name)}, ${op.targetQty})`;

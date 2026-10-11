@@ -7,6 +7,7 @@ import type { SubAgentName } from '../core/agents.js';
 import type { HelperCall, ToolGuard } from '../core/browser/guard.js';
 import type { PageOps } from '../core/execute/result.js';
 import { ProductList } from '../core/explore/product-list.js';
+import { ensureMemoryFile } from '../core/memory.js';
 import type { PageReads } from '../core/qa/report.js';
 import { getShop } from '../core/shops/index.js';
 import { defaultStateFile, type PluginConfig } from './config.js';
@@ -34,6 +35,7 @@ export interface Runtime {
 
 export function createRuntime(config: PluginConfig, log: PluginLogger, opts: { now?: () => Date } = {}): Runtime {
   const shop = getShop(config.shopId);
+  if (config.memoryFile) ensureMemoryFile(config.memoryFile);
   const basketBrowser =
     config.basketBrowser ??
     (config.browserMode === 'extension'

@@ -29,10 +29,10 @@ import type {
 import type { Runtime } from './runtime.js';
 import type { TaskRecord } from './store.js';
 import { answerMessage, spawnTaskText } from './task-text.js';
-import { cancelActive, CHILD_TOOLS, COS_TOOLS, settleEndedRun } from './tools.js';
+import { cancelActive, CHILD_TOOLS, COS_MEMORY_TOOLS, COS_TOOLS, settleEndedRun } from './tools.js';
 
-/** OpenClaw tools COS needs besides ours. */
-const COS_CORE_TOOLS = ['message', 'sessions_spawn', 'sessions_yield', 'sessions_send', 'subagents'];
+/** OpenClaw tools COS needs besides ours: talking, sub-agents, and its memory file (read/write/edit only MEMORY.md). */
+const COS_CORE_TOOLS = ['message', 'sessions_spawn', 'sessions_yield', 'sessions_send', 'subagents', ...COS_MEMORY_TOOLS];
 
 export function agentTools(rt: Runtime): Record<'cos' | SubAgentName, ReadonlySet<string>> {
   const prefix = rt.config.browserToolPrefix;
@@ -72,7 +72,10 @@ export function registerHooks(host: PluginHost, rt: Runtime): void {
         case 'message':
           return messageCall(event, ctx);
         case 'read':
-          return readCall(event);
+          return agent === 'cos' ? memoryFileCall(event) : readCall(event);
+        case 'write':
+        case 'edit':
+          return memoryFileCall(event);
         default:
           return undefined;
       }
@@ -159,10 +162,17 @@ export function registerHooks(host: PluginHost, rt: Runtime): void {
 
   /** Explore reads its skill file and nothing else. */
   function readCall(event: ToolCallEvent): BeforeToolCallResult | undefined {
-    const raw = String(event.params.path ?? event.params.file_path ?? '').trim();
     const workspace = path.dirname(path.dirname(path.dirname(config.skillFile)));
-    if (raw && path.resolve(workspace, raw) === path.resolve(config.skillFile)) return undefined;
+    if (isFile(event, workspace, config.skillFile)) return undefined;
     return block(`Only your skill file can be read: ${path.relative(workspace, config.skillFile)}.`);
+  }
+
+  /** COS reads and changes its memory file and nothing else. */
+  function memoryFileCall(event: ToolCallEvent): BeforeToolCallResult | undefined {
+    const file = config.memoryFile;
+    if (!file) return block('No memory file is set up.');
+    if (isFile(event, path.dirname(file), file)) return undefined;
+    return block(`Only your memory file can be read or changed: ${path.basename(file)}.`);
   }
 
   /** The shop guard of the run's own tab; QA is read-only. */
@@ -287,6 +297,18 @@ export function registerHooks(host: PluginHost, rt: Runtime): void {
 
   // ---------- COS's context, outgoing messages, /new ----------
 
+  // OpenClaw creates no persona files for us (skipBootstrap), and a missing SOUL.md or IDENTITY.md would still reach
+  // the prompt as a "[MISSING] Expected at: ..." line. Only files that exist are injected.
+  host.registerHook(
+    'agent:bootstrap',
+    (event) => {
+      const files = event.context.bootstrapFiles;
+      if (!ourAgent(String(event.context.agentId ?? '')) || !Array.isArray(files)) return;
+      event.context.bootstrapFiles = files.filter((file: { missing?: boolean }) => file.missing !== true);
+    },
+    { name: 'product-order-orchestrator-bootstrap', description: 'Leave missing workspace files out of the prompts of our agents.' },
+  );
+
   host.on('before_prompt_build', (_event, ctx) => {
     if (!ourAgent(ctx.agentId)) return undefined;
     const visible = [...tools[ctx.agentId]];
@@ -319,6 +341,12 @@ export function registerHooks(host: PluginHost, rt: Runtime): void {
     const url = new URL(settings.cartUrl);
     return text.includes(`${url.host}${url.pathname}${url.search}${url.hash}`) || (url.hash.length > 1 && text.includes(url.hash));
   }
+}
+
+/** The file tool's path (relative to the agent's workspace, or absolute) is exactly `file`. */
+function isFile(event: ToolCallEvent, workspace: string, file: string): boolean {
+  const raw = String(event.params.path ?? event.params.file_path ?? event.params.filePath ?? '').trim();
+  return raw !== '' && path.resolve(workspace, raw) === path.resolve(file);
 }
 
 function runGuard(rt: Runtime, task: TaskRecord): ToolGuard {

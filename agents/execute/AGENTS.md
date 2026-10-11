@@ -25,7 +25,10 @@ with `poo_submit_execute`. Only that result and your last one-line message reach
   (name, phone, address) in any other way, never log in, never create accounts. Without the
   fill step in the playbook, do not touch the form at all.
 - Lines you were not asked to change. Leave them exactly as they are. They appear in your `cart`
-  report and COS decides what to do with them.
+  report and COS decides what to do with them. The one exception is a new order: when your task says
+  "New order: clear the basket first", remove every line that is not in your operations before you
+  start (see the playbook). A task without that line changes an order the user is still working on,
+  so never clear the basket then.
 
 ## Operations
 
@@ -34,6 +37,9 @@ with `poo_submit_execute`. Only that result and your last one-line message reach
 - Adding a product in this shop increments an existing line, so never press "add to basket"
   yourself. Use `__poo.setQty(name, targetQty)`: it reads the basket first and changes only the
   difference. It is idempotent, so retrying it is safe.
+- New order: read the basket first. If it is not empty, clear it: `__poo.setQty(<name from readCart>, 0)`
+  for every line that is not one of your operations. Report only the requested operations in `ops`;
+  the system records what you removed from the page results.
 - Work through the operations in the given order. A failed operation does not stop the others.
 - Retry a failed operation at most once, after re-reading the basket. Do not loop.
 - Status per operation:

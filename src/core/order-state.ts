@@ -179,10 +179,23 @@ export class OrderState {
 
   // ---------- sub-agent requests ----------
 
-  /** `merge`: the user adds products to this order (only meaningful once the order has a selection). */
-  exploreSelectRequest(merge = false): ExploreRequest {
+  /**
+   * `merge`: the user adds products to this order (only meaningful once the order has a selection). `standing`: the
+   * products the user wants in every new order, added to the selection; a merge changes the current order, so it
+   * takes none.
+   */
+  exploreSelectRequest(merge = false, standing: readonly BasketItem[] = []): ExploreRequest {
     const adding = merge && this.expected.size > 0;
-    return { type: 'explore-request', action: 'select-products', shopId: this.shopId, ...(adding ? { merge: true } : {}) };
+    if (adding && standing.length > 0) {
+      throw new Error('Standing products go only into a new order: leave out `standing` when the user adds to the current order.');
+    }
+    return {
+      type: 'explore-request',
+      action: 'select-products',
+      shopId: this.shopId,
+      ...(adding ? { merge: true } : {}),
+      ...(standing.length ? { standing: standing.map((item) => ({ ...item })) } : {}),
+    };
   }
 
   exploreUpdateRequest(add: string[], remove: string[]): ExploreRequest {
@@ -190,11 +203,15 @@ export class OrderState {
     return { type: 'explore-request', action: 'update-product-list', shopId: this.shopId, add, remove };
   }
 
-  /** Make the basket match the whole expected basket (absolute quantities). */
+  /**
+   * Make the basket match the whole expected basket (absolute quantities). The first basket change of a new order
+   * also clears what earlier orders left in the basket; later fills of the same order (products added, the order
+   * form filled again) keep the basket as it is.
+   */
   executeInitialRequest(): ExecuteRequest {
     const ops = this.expectedItems().map((item): BasketOp => ({ name: item.name, targetQty: item.qty, ...(item.sku ? { sku: item.sku } : {}) }));
     if (ops.length === 0) throw new Error('The expected basket is empty: get a selection from the explore agent first.');
-    return { type: 'execute-request', shopId: this.shopId, mode: 'initial', ops };
+    return { type: 'execute-request', shopId: this.shopId, mode: 'initial', ops, ...(this.lastExecute ? {} : { clearBasket: true }) };
   }
 
   executeFixRequest(ops: readonly BasketOp[]): ExecuteRequest {

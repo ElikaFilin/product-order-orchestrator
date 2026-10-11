@@ -1,9 +1,10 @@
-import { copyFile, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ROOT_DIR } from '../../src/config/env.js';
 import { skillFile } from '../../src/core/explore/product-list.js';
+import { MEMORY_TEMPLATE } from '../../src/core/memory.js';
 import { karashynyard } from '../../src/core/shops/karashynyard/index.js';
 import { parsePluginConfig, PluginConfig } from '../../src/plugin/config.js';
 import { setupPlugin } from '../../src/plugin/plugin.js';
@@ -71,6 +72,25 @@ describe('tool policy', () => {
   });
 });
 
+describe('workspace files in the prompts', () => {
+  const files = [
+    { name: 'AGENTS.md', path: '/w/AGENTS.md', content: '# COS', missing: false },
+    { name: 'SOUL.md', path: '/w/SOUL.md', missing: true },
+    { name: 'IDENTITY.md', path: '/w/IDENTITY.md', missing: true },
+    { name: 'MEMORY.md', path: '/w/MEMORY.md', content: '# Memory', missing: false },
+  ];
+
+  it('leaves missing files (no "[MISSING]" lines) out of our agents\' prompts', async () => {
+    const context = await host.internal('agent', 'bootstrap', 'agent:cos:main', { agentId: 'cos', bootstrapFiles: files });
+    expect((context.bootstrapFiles as typeof files).map((f) => f.name)).toEqual(['AGENTS.md', 'MEMORY.md']);
+  });
+
+  it('leaves agents of other teams alone', async () => {
+    const context = await host.internal('agent', 'bootstrap', 'agent:main:main', { agentId: 'main', bootstrapFiles: files });
+    expect(context.bootstrapFiles).toBe(files);
+  });
+});
+
 describe('Explore reads only its skill', () => {
   it('allows the skill file, relative to its workspace or absolute', async () => {
     for (const p of ['skills/ask-what-to-buy/SKILL.md', './skills/ask-what-to-buy/SKILL.md', rt.config.skillFile]) {
@@ -80,6 +100,48 @@ describe('Explore reads only its skill', () => {
 
   it.each(['/etc/passwd', '../../.env', 'AGENTS.md', 'skills/ask-what-to-buy/../../AGENTS.md', ''])('denies %s', async (p) => {
     expect(await blocked('read', { path: p }, child('explore'))).toMatch(/Only your skill file/);
+  });
+});
+
+describe("COS's memory file", () => {
+  const memory = () => path.join(dir, 'agents', 'cos', 'MEMORY.md');
+  const withMemory = () => {
+    host = new FakeHost();
+    const config = parsePluginConfig({ skillFile: skillFile(dir), memoryFile: memory(), telegramUserId: 4242, stateFile: path.join(dir, 'state.json') });
+    rt = setupPlugin(host, createRuntime(config, host.logger));
+  };
+
+  it('is created from the template on start, and never overwritten', async () => {
+    withMemory();
+    expect(await readFile(memory(), 'utf8')).toBe(MEMORY_TEMPLATE);
+    await writeFile(memory(), '# Memory\n\n## Every order\n\n- X × 1\n');
+    withMemory();
+    expect(await readFile(memory(), 'utf8')).toContain('- X × 1');
+  });
+
+  it('COS reads, writes and edits MEMORY.md, relative to its workspace or absolute', async () => {
+    withMemory();
+    for (const tool of ['read', 'write', 'edit']) {
+      for (const p of ['MEMORY.md', './MEMORY.md', memory()]) expect(await blocked(tool, { path: p }, COS), `${tool} ${p}`).toBeUndefined();
+    }
+    expect(await blocked('edit', { file_path: 'MEMORY.md' }, COS)).toBeUndefined();
+    expect((await host.promptBuild(COS))?.toolsAllow).toEqual(expect.arrayContaining(['read', 'write', 'edit', 'memory_search', 'memory_get']));
+  });
+
+  it.each(['AGENTS.md', '../explore/skills/ask-what-to-buy/SKILL.md', 'memory/2026-10-11.md', '/etc/passwd', '../../../.env', ''])('COS may not touch %s', async (p) => {
+    withMemory();
+    for (const tool of ['read', 'write', 'edit']) expect(await blocked(tool, { path: p }, COS)).toMatch(/Only your memory file/);
+  });
+
+  it('only COS has it: children cannot write or search it, and Explore cannot read it', async () => {
+    withMemory();
+    expect(await blocked('write', { path: 'MEMORY.md' }, child('explore'))).toMatch(/not available/);
+    expect(await blocked('memory_search', { query: 'x' }, child('qa'))).toMatch(/not available/);
+    expect(await blocked('read', { path: memory() }, child('explore'))).toMatch(/Only your skill file/);
+  });
+
+  it('without a memory file configured, COS file calls are refused', async () => {
+    expect(await blocked('write', { path: 'MEMORY.md' }, COS)).toMatch(/No memory file/);
   });
 });
 

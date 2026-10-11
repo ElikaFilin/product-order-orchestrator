@@ -64,6 +64,14 @@ export class PageOps {
     return { status: done.read.status, actualQty, ...(done.read.detail ? { detail: done.read.detail } : {}) };
   }
 
+  /** Products not in `ops` that the page removed from the basket (setQty to 0 from a non-empty line). */
+  removedExcept(ops: readonly BasketOp[]): string[] {
+    const requested = new Set(ops.map((op) => normalizeName(op.name)));
+    return [...this.setQty.entries()]
+      .filter(([key, d]) => !requested.has(key) && d.targetQty === 0 && d.read.status === 'ok' && d.read.before > 0)
+      .map(([, d]) => d.read.name);
+  }
+
   /** The basket from the last read that came after every change, if there was one. */
   finalCart(): CartLine[] | undefined {
     if (!this.cart || this.cart.seq < this.lastChange()) return undefined;
@@ -96,9 +104,11 @@ export function finalizeExecuteResult(
   }
   const requested = new Set(request.ops.map((op) => normalizeName(op.name)));
   const unrequested = reported.ops.filter((op) => !requested.has(normalizeName(op.name))).map((op) => op.name);
+  const cleared = request.clearBasket && page ? page.removedExcept(request.ops) : [];
   const notes = [
     reported.notes?.trim(),
-    unrequested.length ? `Reported operations that were not requested: ${unrequested.join('; ')}.` : undefined,
+    // Clearing a new order's basket reports lines of earlier orders; those are expected.
+    unrequested.length && !request.clearBasket ? `Reported operations that were not requested: ${unrequested.join('; ')}.` : undefined,
   ].filter((n): n is string => Boolean(n));
 
   return {
@@ -107,6 +117,7 @@ export function finalizeExecuteResult(
     cartUrl,
     ops: request.ops.map((op) => reconcile(op, page?.resultFor(op) ?? reportedByName.get(normalizeName(op.name)))),
     cart: page?.finalCart() ?? reported.cart,
+    ...(cleared.length ? { cleared } : {}),
     ...(checkout ? { orderForm: page ? page.orderForm(checkout) : uncheckedOrderForm('The page data was not captured.') } : {}),
     ...(notes.length ? { notes: notes.join(' ') } : {}),
   };
@@ -130,7 +141,8 @@ const STATUS_TEXT: Record<OpStatus, string> = {
   skipped: 'skipped',
 };
 
-export function summarizeExecute(mode: ExecuteRequest['mode'], result: ExecuteResult): string {
+/** `clearBasket`: the request cleared the basket first (a new order), so any line outside its operations is left over. */
+export function summarizeExecute(mode: ExecuteRequest['mode'], result: ExecuteResult, clearBasket = false): string {
   const count = (status: OpStatus) => result.ops.filter((op) => op.status === status).length;
   const skipped = count('skipped');
   const counts = `${count('ok')} ok, ${count('not_found')} not found, ${count('failed')} failed${skipped ? `, ${skipped} skipped` : ''}`;
@@ -142,8 +154,12 @@ export function summarizeExecute(mode: ExecuteRequest['mode'], result: ExecuteRe
     });
   const lines = result.cart.filter((line) => line.qty > 0);
   const units = lines.reduce((sum, line) => sum + line.qty, 0);
+  const requested = new Set(result.ops.map((op) => normalizeName(op.name)));
+  const leftovers = clearBasket ? lines.filter((line) => !requested.has(normalizeName(line.name))).map((line) => line.name) : [];
   return [
     `Basket ${mode === 'fix' ? 'fix' : 'fill'} finished: ${counts}.`,
+    ...(result.cleared?.length ? [`Cleared first (lines of earlier orders): ${result.cleared.join('; ')}.`] : []),
+    ...(leftovers.length ? [`Not cleared (still in the basket, not in this order): ${leftovers.join('; ')}.`] : []),
     ...problems,
     `Basket now: ${lines.length} line(s), ${units} unit(s).`,
     ...(result.orderForm ? [describeOrderForm(result.orderForm)] : []),

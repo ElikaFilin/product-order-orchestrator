@@ -32,9 +32,16 @@ const MODE_TEXT: Record<ExecuteRequest['mode'], string> = {
 export function buildExecutePrompt(request: ExecuteRequest, shop: Pick<ShopAdapter, 'name' | 'baseUrl'>, instruction: string): string {
   const describe = (op: BasketOp) => (op.targetQty === 0 ? 'remove from the basket' : `quantity ${op.targetQty}`);
   const cos = instruction.trim() ? ['', 'Instruction from the Chief of Staff:', instruction.trim()] : [];
+  const clear = request.clearBasket
+    ? [
+        'New order: clear the basket first. If the basket you read before changing it has lines that are not listed ' +
+          'below, remove each of them (target 0) before the operations: the basket keeps nothing from earlier orders.',
+      ]
+    : [];
   return [
     `Shop: ${shop.name} (${shop.baseUrl}).`,
     `Mode: ${MODE_TEXT[request.mode]}`,
+    ...clear,
     '',
     'Make the basket contain exactly these quantities (absolute targets; 0 removes the line):',
     ...request.ops.map((op, i) => `${i + 1}. ${op.name} — ${describe(op)}`),

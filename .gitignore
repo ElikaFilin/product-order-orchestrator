@@ -16,6 +16,7 @@ agents/*/.openclaw/
 agents/*/memory/
 agents/*/BOOTSTRAP.md
 agents/*/SOUL.md
+!agents/cos/SOUL.md
 agents/*/IDENTITY.md
 agents/*/USER.md
 agents/*/MEMORY.md

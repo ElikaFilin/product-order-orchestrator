@@ -11,9 +11,10 @@ import { SUB_AGENTS, type AgentName } from '../core/agents.js';
 import type { CheckoutDetails } from '../core/contracts.js';
 import { EXECUTE_BROWSER_TOOLS, OPENCLAW_TOOL_PREFIX, PLAYWRIGHT_SERVER, QA_BROWSER_TOOLS } from '../core/browser/toolset.js';
 import { SKILL_NAME, skillFile } from '../core/explore/product-list.js';
+import { memoryFile } from '../core/memory.js';
 import { listShops } from '../core/shops/index.js';
 import { PLUGIN_ID } from '../plugin/config.js';
-import { COS_TOOLS, CHILD_TOOLS } from '../plugin/tools.js';
+import { COS_MEMORY_TOOLS, COS_TOOLS, CHILD_TOOLS } from '../plugin/tools.js';
 
 export const MODELS = { cos: 'anthropic/claude-opus-5-5', subagents: 'anthropic/claude-sonnet-5-5' } as const;
 export const RUN_TIMEOUT_SECONDS = { explore: 300, execute: 900, qa: 600 } as const;
@@ -62,7 +63,7 @@ export function agentAllowLists(): Record<AgentName, string[]> {
     execute: [...browser(EXECUTE_BROWSER_TOOLS), ...childTools('execute')],
     qa: [...browser(QA_BROWSER_TOOLS), ...childTools('qa')],
   };
-  const cos = ['message', 'sessions_spawn', 'sessions_yield', 'sessions_send', 'subagents', ...COS_TOOLS];
+  const cos = ['message', 'sessions_spawn', 'sessions_yield', 'sessions_send', 'subagents', ...COS_MEMORY_TOOLS, ...COS_TOOLS];
   return { cos: [...new Set([...cos, ...lists.explore, ...lists.execute, ...lists.qa])], ...lists };
 }
 
@@ -89,6 +90,8 @@ export function buildOpenClawConfig(o: OpenClawConfigOptions): Record<string, un
         // Without it the gateway falls back to an OpenAI model for sessions no agent entry names.
         model: models.cos,
         heartbeat: { every: '0m' },
+        // COS's memory is only what the user saves ("save this"): no automatic notes before a compaction.
+        compaction: { memoryFlush: { enabled: false } },
         subagents: { maxSpawnDepth: 1, archiveAfterMinutes: 0, runTimeoutSeconds: RUN_TIMEOUT_SECONDS.execute },
       },
       entries: {
@@ -98,7 +101,8 @@ export function buildOpenClawConfig(o: OpenClawConfigOptions): Record<string, un
           workspace: workspace('cos'),
           model: models.cos,
           skills: [],
-          tools: { allow: allow.cos },
+          // The plugin narrows read/write/edit further, to MEMORY.md.
+          tools: { allow: allow.cos, fs: { workspaceOnly: true } },
           subagents: { allowAgents: [...SUB_AGENTS], requireAgentId: true },
         },
         // Explore never starts the browser server (a deny on its namespace keeps the session from connecting it).
@@ -108,6 +112,10 @@ export function buildOpenClawConfig(o: OpenClawConfigOptions): Record<string, un
       },
     },
     bindings: [{ agentId: 'cos', match: { channel: 'telegram', accountId: 'default' } }],
+    // The owner's turns count as the owner's: what COS writes to MEMORY.md then stays trusted and in its prompt.
+    commands: { ownerAllowFrom: [`telegram:${o.telegramUserId}`] },
+    // memory_search ranks by keywords only: no embeddings provider or extra API key.
+    memory: { search: { provider: 'none' } },
     channels: {
       telegram: {
         enabled: true,
@@ -142,6 +150,7 @@ export function buildOpenClawConfig(o: OpenClawConfigOptions): Record<string, un
           hooks: { allowConversationAccess: true, allowPromptInjection: true },
           config: {
             skillFile: skillFile(o.workspaceRoot),
+            memoryFile: memoryFile(o.workspaceRoot),
             telegramUserId: o.telegramUserId,
             browserMode: o.browser.mode,
             browserToolPrefix: OPENCLAW_TOOL_PREFIX,
@@ -177,7 +186,6 @@ export function buildE2eConfig(o: OpenClawConfigOptions, g: E2eGatewayOptions): 
     telemetry: { enabled: false },
     discovery: { mdns: { mode: 'off' } },
     cron: { enabled: false },
-    memory: { search: { provider: 'none' } },
     models: {
       mode: 'replace',
       catalogRefresh: { enabled: false },

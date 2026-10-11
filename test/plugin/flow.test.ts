@@ -65,6 +65,41 @@ async function askAndAnswer(taskId: string, ctx: ReturnType<typeof child>, quest
   return send;
 }
 
+describe('a new order and changes to it', () => {
+  it('adds the every-order products, clears the basket on the first fill, and keeps it when the user adds products', async () => {
+    await expect(host.tool('poo_task', { agent: 'explore', instruction: '', standing: [{ name: 'Шоколад', qty: 1 }] }, COS)).rejects.toThrow(
+      /Not in the product list: Шоколад/,
+    );
+    const explore = await spawn('explore', { standing: [{ name: ` ${FILLET} `, qty: 1 }] });
+    const text = String(explore.params.task);
+    expect(text).toContain(`Завжди додається до замовлення: ${FILLET} × 1.`);
+    expect(text).toContain(`Every-order products: ${FILLET} × 1.`);
+    const question = text.match(/"""\n([\s\S]*?)\n"""/)![1]!;
+    await askAndAnswer(explore.taskId, explore.ctx, question, '0');
+    // "0": only the every-order products.
+    expect(await host.tool('poo_submit_selection', { outcome: 'selected', items: [] }, explore.ctx)).toContain(`Selected 1 product(s): ${FILLET} × 1.`);
+
+    const first = await spawn('execute');
+    expect(String(first.params.task)).toContain('New order: clear the basket first.');
+    await host.tool('poo_submit_execute', { ops: [{ name: FILLET, targetQty: 1, status: 'ok', actualQty: 1 }], cart: [{ name: FILLET, qty: 1 }] }, first.ctx);
+    await host.emit('subagent_ended', { targetSessionKey: first.ctx.sessionKey, reason: 'subagent-complete', outcome: 'ok', runId: first.ctx.runId }, {});
+
+    // The user adds a product: no every-order products, and the basket is not cleared.
+    await expect(host.tool('poo_task', { agent: 'explore', instruction: 'add 2', merge: true, standing: [{ name: FILLET, qty: 1 }] }, COS)).rejects.toThrow(
+      /only into a new order/,
+    );
+    const adding = await spawn('explore', { instruction: 'add 2', merge: true }, 2);
+    expect(String(adding.params.task)).not.toContain('Every-order products');
+    expect(await host.tool('poo_submit_selection', { outcome: 'selected', items: [{ row: 2, name: THIGH, qty: 1 }] }, adding.ctx)).toMatch(/Submitted/);
+    const second = await spawn('execute', {}, 2);
+    expect(String(second.params.task)).not.toContain('clear the basket');
+    expect(rt.store.order.expectedItems().map((i) => [i.name, i.qty])).toEqual([
+      [FILLET, 1],
+      [THIGH, 1],
+    ]);
+  });
+});
+
 describe('a whole order through the plugin', () => {
   it('selects, fills, verifies and only then sends the basket link', async () => {
     // Explore: the plugin writes the task text with the product question rendered from the skill table.

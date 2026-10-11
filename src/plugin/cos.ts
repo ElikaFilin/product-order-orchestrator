@@ -9,6 +9,7 @@ import {
   ProductListUpdate,
   QaResult,
   Selection,
+  type BasketItem,
   type BasketOp,
   type QaFocus,
 } from '../core/contracts.js';
@@ -24,6 +25,8 @@ export interface TaskArgs {
   instruction: string;
   action?: DelegateAction;
   merge?: boolean;
+  /** explore select-products, new order: products for every order, already resolved to product-list names. */
+  standing?: BasketItem[];
   ops?: BasketOp[];
   add?: string[];
   remove?: string[];
@@ -45,7 +48,7 @@ export function buildRequest(state: OrderState, args: TaskArgs): SubAgentRequest
   switch (args.agent) {
     case 'explore':
       if (action === 'update-product-list') return state.exploreUpdateRequest(args.add ?? [], args.remove ?? []);
-      if (action === undefined || action === 'select-products') return state.exploreSelectRequest(args.merge === true);
+      if (action === undefined || action === 'select-products') return state.exploreSelectRequest(args.merge === true, args.standing);
       break;
     case 'execute':
       if (action === 'fix') return state.executeFixRequest(args.ops ?? []);

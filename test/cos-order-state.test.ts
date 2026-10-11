@@ -42,6 +42,7 @@ describe('OrderState', () => {
         { name: THIGH, targetQty: 1, sku: '8' },
         { name: LIVER, targetQty: 1 },
       ],
+      clearBasket: true,
     });
 
     // Initial execute: liver not found. Expected stays as the user wants it; QA compares the whole basket (no re-checks).
@@ -258,6 +259,38 @@ describe('OrderState', () => {
     ]);
     expect(state.isVerified()).toBe(false);
     expect(state.executeInitialRequest().ops).toHaveLength(4);
+  });
+
+  it('clears the basket only on the first fill of a new order, never when the user changes the current one', () => {
+    const state = new OrderState(SHOP);
+    state.applySelection(selection);
+    expect(state.executeInitialRequest().clearBasket).toBe(true);
+
+    // The first fill happened: adding products (merge) or filling the order form again keeps the basket.
+    state.applyExecuteResult(executeResult([{ name: FILLET, targetQty: 2, status: 'ok', actualQty: 2 }]), 'initial');
+    expect(state.executeInitialRequest()).not.toHaveProperty('clearBasket');
+    state.applySelection({ type: 'selection', shopId: SHOP, items: [{ name: PASTE, qty: 1 }] }, true);
+    expect(state.executeInitialRequest()).not.toHaveProperty('clearBasket');
+    expect(state.executeFixRequest([{ name: PASTE, targetQty: 0 }])).not.toHaveProperty('clearBasket');
+
+    // A new selection (or /new) is a new order again.
+    state.applySelection(selection);
+    expect(state.executeInitialRequest().clearBasket).toBe(true);
+    state.applyExecuteResult(executeResult([{ name: FILLET, targetQty: 2, status: 'ok', actualQty: 2 }]), 'initial');
+    state.reset();
+    state.applySelection(selection, true);
+    expect(state.executeInitialRequest().clearBasket).toBe(true);
+  });
+
+  it('takes standing (every-order) products for a new order only', () => {
+    const state = new OrderState(SHOP);
+    const standing = [{ name: FILLET, qty: 1, sku: '1' }];
+    expect(state.exploreSelectRequest(false, standing)).toEqual({ type: 'explore-request', action: 'select-products', shopId: SHOP, standing });
+    // merge on an empty order is a new order, so it takes them too.
+    expect(state.exploreSelectRequest(true, standing)).toEqual({ type: 'explore-request', action: 'select-products', shopId: SHOP, standing });
+    state.applySelection(selection);
+    expect(() => state.exploreSelectRequest(true, standing)).toThrow(/only into a new order/);
+    expect(state.exploreSelectRequest(true)).toEqual({ type: 'explore-request', action: 'select-products', shopId: SHOP, merge: true });
   });
 
   it('merge on an order without a selection is a plain selection', () => {

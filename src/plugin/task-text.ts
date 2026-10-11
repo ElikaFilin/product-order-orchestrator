@@ -62,6 +62,12 @@ async function body(task: TaskRecord, deps: TaskTextDeps): Promise<string> {
           .join('\n\n');
       }
       const products = await deps.productList.read(request.shopId);
+      const standing = request.standing ?? [];
+      const always = standing.length
+        ? `Every-order products: ${standing.map((i) => `${i.name} × ${i.qty}`).join('; ')}. The user asked to have them in ` +
+          'every order; code adds them to your selection, so never submit or ask about them. The question already says so. ' +
+          'An answer that selects nothing else ("0", "нічого") means only these products: submit outcome "selected" with no items.'
+        : '';
       const merge = request.merge
         ? 'Merge: the user adds products to an order that already has a selection (the result is added to it). ' +
           'If the message from the Chief of Staff already names the products (numbers or names) and quantities, read them by ' +
@@ -71,10 +77,11 @@ async function body(task: TaskRecord, deps: TaskTextDeps): Promise<string> {
         `Task: select-products for shop "${request.shopId}".`,
         cos,
         merge,
+        always,
         `Read your ${SKILL_NAME} skill first, then follow its "A. select-products" procedure.`,
         // Rendered in code from the skill's table, so the numbers the user sees are exactly the table rows.
         'The product question (its numbers are the table\'s # column). Send it with poo_ask_user word for word, then end your run:',
-        `"""\n${productQuestion(products)}\n"""`,
+        `"""\n${productQuestion(products, standing)}\n"""`,
         'When the answer arrives in this session, read it by the procedure and call poo_submit_selection with the rows ' +
           'the user chose (outcome "canceled" only if the user confirmed they want nothing).',
       ]
@@ -84,7 +91,7 @@ async function body(task: TaskRecord, deps: TaskTextDeps): Promise<string> {
     case 'execute-request': {
       const shop = getShop(request.shopId);
       const tools = browserToolset({ role: 'execute', mode: deps.browserMode, prefix: deps.browserToolPrefix });
-      const playbook = shop.executePlaybook(tools, { fillOrderForm: deps.fillOrderForm });
+      const playbook = shop.executePlaybook(tools, { fillOrderForm: deps.fillOrderForm, clearBasket: request.clearBasket === true });
       return [buildExecutePrompt(request, shop, task.instruction), playbook, ASK].join('\n\n');
     }
     case 'qa-request': {

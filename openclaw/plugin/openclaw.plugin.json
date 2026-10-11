@@ -27,6 +27,7 @@
     "required": ["skillFile", "telegramUserId"],
     "properties": {
       "skillFile": { "type": "string", "minLength": 1, "description": "Absolute path of Explore's ask-what-to-buy SKILL.md" },
+      "memoryFile": { "type": "string", "minLength": 1, "description": "Absolute path of COS's MEMORY.md, the only file COS may read and write" },
       "telegramUserId": { "type": ["string", "integer"], "description": "Numeric Telegram user id of the owner" },
       "shopId": { "type": "string", "minLength": 1, "default": "karashynyard" },
       "browserMode": { "type": "string", "enum": ["extension", "cdp"], "default": "extension" },
