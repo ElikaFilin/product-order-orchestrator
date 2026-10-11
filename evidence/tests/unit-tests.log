@@ -1,0 +1,315 @@
+
+ RUN  v5.0.3 <repo>
+
+ ✓ test/cos-order-state.test.ts > OrderState > runs selection -> execute (ok/not_found) -> qa mismatch -> fix -> focused re-check -> accept extras 6ms
+ ✓ test/cos-order-state.test.ts > OrderState > a failed fix operation leaves the expected basket and the focus alone 0ms
+ ✓ test/cos-order-state.test.ts > OrderState > accepting qty 0 drops a line the user does not want, resolving a missing difference 0ms
+ ✓ test/cos-order-state.test.ts > OrderState > builds explore requests 1ms
+ ✓ test/cos-order-state.test.ts > OrderState > refuses an initial execute without a selection and resets to a fresh order 0ms
+ ✓ test/cos-order-state.test.ts > OrderState > drops a re-check the user overrode by accepting the line, so a later check cannot contradict the order 1ms
+ ✓ test/cos-order-state.test.ts > OrderState > a basket read only from the browser storage is never verified 0ms
+ ✓ test/cos-order-state.test.ts > OrderState > a merge selection adds to the expected basket and asks for a new check 1ms
+ ✓ test/cos-order-state.test.ts > OrderState > clears the basket only on the first fill of a new order, never when the user changes the current one 1ms
+ ✓ test/cos-order-state.test.ts > OrderState > takes standing (every-order) products for a new order only 0ms
+ ✓ test/cos-order-state.test.ts > OrderState > merge on an order without a selection is a plain selection 0ms
+ ✓ test/cos-order-state.test.ts > OrderState > replacing a product that was not found removes it from the order and re-checks both lines 0ms
+ ✓ test/cos-order-state.test.ts > OrderState > hands QA the order form check of the last basket change, and is verified only when the form is right 1ms
+ ✓ test/cos-order-state.test.ts > OrderState > survives a snapshot round trip, including a pending re-check 1ms
+ ✓ test/guard.test.ts > browser tool lists per role > nothing types, presses keys, fills forms or touches other tabs; only QA clicks 3ms
+ ✓ test/guard.test.ts > createBrowserGuard: scope and allow-list > ignores tools of other servers 0ms
+ ✓ test/guard.test.ts > createBrowserGuard: scope and allow-list > denies browser tools outside the allow-list: 0 0ms
+ ✓ test/guard.test.ts > createBrowserGuard: scope and allow-list > denies browser tools outside the allow-list: 1 0ms
+ ✓ test/guard.test.ts > createBrowserGuard: scope and allow-list > denies browser tools outside the allow-list: 2 0ms
+ ✓ test/guard.test.ts > createBrowserGuard: scope and allow-list > denies browser tools outside the allow-list: 3 0ms
+ ✓ test/guard.test.ts > createBrowserGuard: scope and allow-list > denies browser tools outside the allow-list: 4 0ms
+ ✓ test/guard.test.ts > createBrowserGuard: scope and allow-list > allows a plain allowed call unchanged 0ms
+ ✓ test/guard.test.ts > createBrowserGuard: scope and allow-list > denies file paths and form submission flags 0ms
+ ✓ test/guard.test.ts > createBrowserGuard: the user's tabs > over CDP: nothing runs before this run opened its own tab, then everything allowed does 1ms
+ ✓ test/guard.test.ts > createBrowserGuard: the user's tabs > never lists, selects or closes tabs (list) 0ms
+ ✓ test/guard.test.ts > createBrowserGuard: the user's tabs > never lists, selects or closes tabs (select) 0ms
+ ✓ test/guard.test.ts > createBrowserGuard: the user's tabs > never lists, selects or closes tabs (close) 0ms
+ ✓ test/guard.test.ts > createBrowserGuard: the user's tabs > Playwright through the extension (the session sees only its own tab group) > starts in its own tab: the extension's connect page opened for this run 0ms
+ ✓ test/guard.test.ts > createBrowserGuard: the user's tabs > Playwright through the extension (the session sees only its own tab group) > closes only its current tab, and nothing runs after that (a new call would reconnect and open a tab) 0ms
+ ✓ test/guard.test.ts > createBrowserGuard: the user's tabs > over CDP never closes a tab, not even the current one 1ms
+ ✓ test/guard.test.ts > createBrowserGuard: navigation allow-list > allows https://karashynyard.com.ua/ 0ms
+ ✓ test/guard.test.ts > createBrowserGuard: navigation allow-list > allows https://karashynyard.com.ua/#opencart 0ms
+ ✓ test/guard.test.ts > createBrowserGuard: navigation allow-list > allows karashynyard.com.ua/ 0ms
+ ✓ test/guard.test.ts > createBrowserGuard: navigation allow-list > allows about:blank 0ms
+ ✓ test/guard.test.ts > createBrowserGuard: navigation allow-list > denies https://example.com/ 0ms
+ ✓ test/guard.test.ts > createBrowserGuard: navigation allow-list > denies https://karashynyard.com.ua.evil.com/ 0ms
+ ✓ test/guard.test.ts > createBrowserGuard: navigation allow-list > denies https://karashynyard.com.ua@evil.com/ 0ms
+ ✓ test/guard.test.ts > createBrowserGuard: navigation allow-list > denies http://karashynyard.com.ua/ 0ms
+ ✓ test/guard.test.ts > createBrowserGuard: navigation allow-list > denies https://forms.tildaapi.one/procces/ 0ms
+ ✓ test/guard.test.ts > createBrowserGuard: navigation allow-list > denies javascript:alert(1) 0ms
+ ✓ test/guard.test.ts > createBrowserGuard: navigation allow-list > denies data:text/html,<h1>x</h1> 0ms
+ ✓ test/guard.test.ts > createBrowserGuard: navigation allow-list > denies file:///etc/passwd 0ms
+ ✓ test/guard.test.ts > createBrowserGuard: navigation allow-list > allows opening a blank tab without a url 0ms
+ ✓ test/guard.test.ts > createBrowserGuard: page scripts are single helper calls > allows () => window.__poo.status() 0ms
+ ✓ test/guard.test.ts > createBrowserGuard: page scripts are single helper calls > allows window.__poo.readCart() 0ms
+ ✓ test/guard.test.ts > createBrowserGuard: page scripts are single helper calls > allows async () => await window.__poo.setQty("Філе зі стегна індички, 1 кг", 2) 1ms
+ ✓ test/guard.test.ts > createBrowserGuard: page scripts are single helper calls > allows () => { return window.__poo.find("Шиї курки, 1 кг"); } 0ms
+ ✓ test/guard.test.ts > createBrowserGuard: page scripts are single helper calls > allows __poo.readModal(); 0ms
+ ✓ test/guard.test.ts > createBrowserGuard: page scripts are single helper calls > allows () => window.__poo.setQty("a), evil(", 0) 0ms
+ ✓ test/guard.test.ts > createBrowserGuard: page scripts are single helper calls > denies () => { location.href = "https://example.com" } 0ms
+ ✓ test/guard.test.ts > createBrowserGuard: page scripts are single helper calls > denies window.open("https://example.com") 0ms
+ ✓ test/guard.test.ts > createBrowserGuard: page scripts are single helper calls > denies () => document.title 0ms
+ ✓ test/guard.test.ts > createBrowserGuard: page scripts are single helper calls > denies window.__poo.setQty("x", 1); fetch("https://example.com") 4ms
+ ✓ test/guard.test.ts > createBrowserGuard: page scripts are single helper calls > denies window.__poo.setQty('single quotes', 1) 0ms
+ ✓ test/guard.test.ts > createBrowserGuard: page scripts are single helper calls > denies window.__poo.setQty(name, 1) 0ms
+ ✓ test/guard.test.ts > createBrowserGuard: page scripts are single helper calls > denies window.__poo.setQty("x", 1.5) 0ms
+ ✓ test/guard.test.ts > createBrowserGuard: page scripts are single helper calls > denies window.__poo['set' + 'Qty']('x', 0) 0ms
+ ✓ test/guard.test.ts > createBrowserGuard: page scripts are single helper calls > denies window.__poo.openCart() 0ms
+ ✓ test/guard.test.ts > createBrowserGuard: page scripts are single helper calls > denies var f = document.querySelector(".t706__cartwin form"); f.querySelector("button").click() 0ms
+ ✓ test/guard.test.ts > createBrowserGuard: page scripts are single helper calls > denies document.querySelector(".t706__product-del").click() 0ms
+ ✓ test/guard.test.ts > createBrowserGuard: page scripts are single helper calls > parses the call and its literal arguments 1ms
+ ✓ test/guard.test.ts > createBrowserGuard: order form patterns > denies order-form input 0 0ms
+ ✓ test/guard.test.ts > createBrowserGuard: order form patterns > denies order-form input 1 0ms
+ ✓ test/guard.test.ts > createBrowserGuard: order form patterns > denies order-form input 2 0ms
+ ✓ test/guard.test.ts > createBrowserGuard: order form patterns > denies order-form input 3 0ms
+ ✓ test/guard.test.ts > createBrowserGuard: order form patterns > denies order-form input 4 0ms
+ ✓ test/guard.test.ts > createBrowserGuard: the order form > passes the configured details to fillOrderForm: the model never types them 1ms
+ ✓ test/guard.test.ts > createBrowserGuard: the order form > denies arguments from the model, and filling when no details are configured 0ms
+ ✓ test/guard.test.ts > createBrowserGuard: the order form > still blocks direct access to the form and its submit button 0ms
+ ✓ test/guard.test.ts > createBrowserGuard: the order form > through the extension, keeps the tab that holds the filled form 0ms
+ ✓ test/guard.test.ts > createBrowserGuard: helper injection > rewrites only `function`, keeps other fields, and the result behaves like the original 4ms
+ ✓ test/guard.test.ts > createBrowserGuard: helper injection > does not rewrite other tools 0ms
+ ✓ test/execute-request.test.ts > resolveExecuteRequest > uses an execute-request payload as is 6ms
+ ✓ test/execute-request.test.ts > resolveExecuteRequest > prefers the execute-request over a forwarded selection 1ms
+ ✓ test/execute-request.test.ts > resolveExecuteRequest > builds an initial request from a forwarded selection 1ms
+ ✓ test/execute-request.test.ts > resolveExecuteRequest > sums selection lines for the same product (ops are absolute) 0ms
+ ✓ test/execute-request.test.ts > resolveExecuteRequest > rejects a message without a usable payload 1ms
+ ✓ test/execute-request.test.ts > buildExecutePrompt > lists the ops numbered, as JSON, with the mode, the shop and the COS instruction 1ms
+ ✓ test/execute-request.test.ts > buildExecutePrompt > tells a new order to clear the basket first, and nothing else to 0ms
+ ✓ test/execute-request.test.ts > buildExecutePrompt > omits the instruction block when COS sent no text 0ms
+ ✓ test/execute-request.test.ts > finalizeExecuteResult > forces shopId and cartUrl from the request and the shop 3ms
+ ✓ test/execute-request.test.ts > finalizeExecuteResult > adds every requested op the agent did not report as skipped, in request order 0ms
+ ✓ test/execute-request.test.ts > finalizeExecuteResult > matches reported ops by normalized name and keeps the requested name and target 0ms
+ ✓ test/execute-request.test.ts > finalizeExecuteResult > keeps not_found / failed details from the agent 1ms
+ ✓ test/execute-request.test.ts > finalizeExecuteResult > downgrades "ok" to failed when the read-back quantity is not the target 0ms
+ ✓ test/execute-request.test.ts > finalizeExecuteResult > uses the first report for a product and notes ops that were not requested 0ms
+ ✓ test/execute-request.test.ts > finalizeExecuteResult > passes the basket lines through 1ms
+ ✓ test/execute-request.test.ts > finalizeExecuteResult with page data > takes each operation's status and quantity from the page, not from the model's retelling 3ms
+ ✓ test/execute-request.test.ts > finalizeExecuteResult with page data > ignores a basket read made before the last change, and a setQty with another target 0ms
+ ✓ test/execute-request.test.ts > finalizeExecuteResult with page data > records the lines of earlier orders a new order cleared, and calls out what is left 1ms
+ ✓ test/execute-request.test.ts > finalizeExecuteResult with page data > reports not_found with the closest names the helper gave 0ms
+ ✓ test/execute-request.test.ts > summarizeExecute > counts statuses and lists the problems 1ms
+ ✓ test/execute-request.test.ts > summarizeExecute > is short when everything went fine 0ms
+ ✓ test/explore-product-list.test.ts > Explore product list (ask-what-to-buy skill) > parses the initial list: 21 products with exact site names, SKUs and prices 7ms
+ ✓ test/explore-product-list.test.ts > Explore product list (ask-what-to-buy skill) > adds a product with renumbering, bumps metadata and leaves the rest of the file untouched 13ms
+ ✓ test/explore-product-list.test.ts > Explore product list (ask-what-to-buy skill) > treats a duplicate add (any case or spacing) as a no-op and does not rewrite the file 5ms
+ ✓ test/explore-product-list.test.ts > Explore product list (ask-what-to-buy skill) > removes a product, renumbers the rest and reports names that were not listed 4ms
+ ✓ test/explore-product-list.test.ts > Explore product list (ask-what-to-buy skill) > serializes concurrent updates 86ms
+ ✓ test/explore-product-list.test.ts > Explore product list (ask-what-to-buy skill) > rejects names that would break the table and shops without a list 5ms
+ ✓ test/order-form.test.ts > checkOrderForm > accepts the formatted phone and whitespace differences 4ms
+ ✓ test/order-form.test.ts > checkOrderForm > lists every field that differs, with the page detail 1ms
+ ✓ test/order-form.test.ts > checkOrderForm > is unverified when the page has no form 0ms
+ ✓ test/order-form.test.ts > Execute: the order form from the page > checks the last read-back after the basket changes, whatever the model reports 4ms
+ ✓ test/order-form.test.ts > Execute: the order form from the page > is unverified when the form was never filled, or the basket changed after the last read 1ms
+ ✓ test/order-form.test.ts > Execute: the order form from the page > ignores page results that do not look like the helper, and leaves the form out when nothing is configured 1ms
+ ✓ test/order-form.test.ts > QA: the order form check rides along > matches only when the basket and the form are right 3ms
+ ✓ test/order-form.test.ts > QA: the order form check rides along > is the basket check alone when no form was filled 0ms
+ ✓ test/shop-adapter.test.ts > karashynyard adapter > is registered and stays on the shop origin 3ms
+ ✓ test/shop-adapter.test.ts > playbooks for Playwright over CDP > use only tools the agent is allowed to call 1ms
+ ✓ test/shop-adapter.test.ts > playbooks for Playwright over CDP > render calls that the agent's guard lets through 3ms
+ ✓ test/shop-adapter.test.ts > playbooks for Playwright over CDP > never tell an agent to switch tabs; close only its own tab, as the last call, when it sees only its own tabs 1ms
+ ✓ test/shop-adapter.test.ts > playbooks for Playwright over CDP > render the eval tool with the right code field 0ms
+ ✓ test/shop-adapter.test.ts > playbooks for Playwright over CDP > Execute and QA put their own tab on the shop first; Execute re-checks with readCart 2ms
+ ✓ test/shop-adapter.test.ts > playbooks for Playwright over CDP > QA clicks the cart icon, then falls back to the header icon and the cart URL 0ms
+ ✓ test/shop-adapter.test.ts > playbooks for Playwright through the extension > use only tools the agent is allowed to call 1ms
+ ✓ test/shop-adapter.test.ts > playbooks for Playwright through the extension > render calls that the agent's guard lets through 11ms
+ ✓ test/shop-adapter.test.ts > playbooks for Playwright through the extension > never tell an agent to switch tabs; close only its own tab, as the last call, when it sees only its own tabs 1ms
+ ✓ test/shop-adapter.test.ts > playbooks for Playwright through the extension > render the eval tool with the right code field 0ms
+ ✓ test/shop-adapter.test.ts > playbooks for Playwright through the extension > Execute and QA put their own tab on the shop first; Execute re-checks with readCart 0ms
+ ✓ test/shop-adapter.test.ts > playbooks for Playwright through the extension > QA clicks the cart icon, then falls back to the header icon and the cart URL 0ms
+ ✓ test/shop-adapter.test.ts > Execute playbook that fills the order form, for Playwright over CDP > fills the form without arguments and reads it back, after the basket check 0ms
+ ✓ test/shop-adapter.test.ts > Execute playbook that fills the order form, for Playwright over CDP > renders only calls its guard lets through, and never closes the tab that holds the form 0ms
+ ✓ test/shop-adapter.test.ts > Execute playbook that fills the order form, for Playwright over CDP > still forbids sending the order and typing personal data 0ms
+ ✓ test/shop-adapter.test.ts > Execute playbook that fills the order form, for Playwright over CDP > is the plain basket playbook without the option 0ms
+ ✓ test/shop-adapter.test.ts > Execute playbook that fills the order form, for Playwright through the extension > fills the form without arguments and reads it back, after the basket check 0ms
+ ✓ test/shop-adapter.test.ts > Execute playbook that fills the order form, for Playwright through the extension > renders only calls its guard lets through, and never closes the tab that holds the form 0ms
+ ✓ test/shop-adapter.test.ts > Execute playbook that fills the order form, for Playwright through the extension > still forbids sending the order and typing personal data 0ms
+ ✓ test/shop-adapter.test.ts > Execute playbook that fills the order form, for Playwright through the extension > is the plain basket playbook without the option 0ms
+ ✓ test/shop-adapter.test.ts > karashynyard forbiddenPatterns > do not match normal usage: window.__poo.setQty("Філе зі стегна індички, 1 кг", 2) 0ms
+ ✓ test/shop-adapter.test.ts > karashynyard forbiddenPatterns > do not match normal usage: window.__poo.setQty("Горіхова паста з фунндуком 350 г", 0) 0ms
+ ✓ test/shop-adapter.test.ts > karashynyard forbiddenPatterns > do not match normal usage: window.__poo.find("Котлети з фермерської індички та кролика, 900 г") 0ms
+ ✓ test/shop-adapter.test.ts > karashynyard forbiddenPatterns > do not match normal usage: window.__poo.readCart() 0ms
+ ✓ test/shop-adapter.test.ts > karashynyard forbiddenPatterns > do not match normal usage: window.__poo.readModal() 0ms
+ ✓ test/shop-adapter.test.ts > karashynyard forbiddenPatterns > do not match normal usage: window.__poo.status() 0ms
+ ✓ test/shop-adapter.test.ts > karashynyard forbiddenPatterns > do not match normal usage: window.__poo.fillOrderForm() 0ms
+ ✓ test/shop-adapter.test.ts > karashynyard forbiddenPatterns > do not match normal usage: window.__poo.readOrderForm() 0ms
+ ✓ test/shop-adapter.test.ts > karashynyard forbiddenPatterns > do not match normal usage: .t706__carticon-wrapper 0ms
+ ✓ test/shop-adapter.test.ts > karashynyard forbiddenPatterns > do not match normal usage: a.t-menuwidgeticons__link_cart 0ms
+ ✓ test/shop-adapter.test.ts > karashynyard forbiddenPatterns > do not match normal usage: .t706__cartwin.t706__cartwin_showed 0ms
+ ✓ test/shop-adapter.test.ts > karashynyard forbiddenPatterns > do not match normal usage: .t706__cartwin-products 0ms
+ ✓ test/shop-adapter.test.ts > karashynyard forbiddenPatterns > do not match normal usage: https://karashynyard.com.ua/#opencart 0ms
+ ✓ test/shop-adapter.test.ts > karashynyard forbiddenPatterns > match the order form: .t706__orderform input 0ms
+ ✓ test/shop-adapter.test.ts > karashynyard forbiddenPatterns > match the order form: Відправити замовлення 0ms
+ ✓ test/shop-adapter.test.ts > karashynyard forbiddenPatterns > match the order form: form#form638772399 0ms
+ ✓ test/shop-adapter.test.ts > karashynyard forbiddenPatterns > match the order form: button[type=submit] 0ms
+ ✓ test/shop-adapter.test.ts > karashynyard forbiddenPatterns > match the order form: .t-submit 0ms
+ ✓ test/shop-adapter.test.ts > karashynyard forbiddenPatterns > match the order form: document.forms[0].submit() 0ms
+ ✓ test/shop-adapter.test.ts > karashynyard forbiddenPatterns > match the order form: form.requestSubmit() 0ms
+ ✓ test/shop-adapter.test.ts > karashynyard forbiddenPatterns > match the order form: window.tildaForm.send(form) 0ms
+ ✓ test/shop-adapter.test.ts > karashynyard forbiddenPatterns > match the order form: fetch("https://forms.tildaapi.one/procces/") 0ms
+ ✓ test/shop-adapter.test.ts > karashynyard forbiddenPatterns > match the order form: fetch("https://forms2.tildacdn.com/procces/") 0ms
+ ✓ test/shop-adapter.test.ts > karashynyard forbiddenPatterns > match the order form: input.t-input[name="Ваше імя"] 0ms
+ ✓ test/shop-adapter.test.ts > karashynyard forbiddenPatterns > match the order form: Подарувати тушонку ЗСУ 0ms
+ ✓ test/shop-adapter.test.ts > karashynyard forbiddenPatterns > do not match the in-page helper itself 0ms
+ ✓ test/shop-adapter.test.ts > karashynyard helperSource > defines window.__poo once per version 2ms
+ ✓ test/shop-adapter.test.ts > karashynyard helperSource > readOrderForm reports a missing form instead of throwing 1ms
+ ✓ test/shop-adapter.test.ts > karashynyard helperSource > readCart ignores deleted and empty lines and sums units and amounts 1ms
+ ✓ test/browser-connection.test.ts > Playwright MCP arguments per connection > extension: connects through the extension in the configured profile, never with the token on the command line 3ms
+ ✓ test/browser-connection.test.ts > Playwright MCP arguments per connection > cdp: attaches to the endpoint 0ms
+ ✓ test/browser-connection.test.ts > Playwright MCP arguments per connection > blocks the checkout origins of every shop once, semicolon-separated 0ms
+ ✓ test/browser-connection.test.ts > browserToolset > names the tools with the OpenClaw prefix by default, and QA alone may click 0ms
+ ✓ test/browser-connection.test.ts > browserToolset > only the extension starts in the run's own tab and sees only its own tabs 1ms
+ ✓ test/browser-connection.test.ts > browser settings > defaults to the extension in the "Default" Chrome profile 5ms
+ ✓ test/browser-connection.test.ts > browser settings > cdp mode uses the CDP endpoint 1ms
+ ✓ test/browser-connection.test.ts > extension pre-flight > passes when the configured profile has the extension and names it for the final message 40ms
+ ✓ test/browser-connection.test.ts > extension pre-flight > fails with an install hint when only another profile has the extension 22ms
+ ✓ test/browser-connection.test.ts > extension pre-flight > falls back to the directory name when Chrome has never run 20ms
+ ✓ test/shop-adapter.test.ts > karashynyard helperSource > status waits for the page, then reports not ready before Tilda initialises the cart 102ms
+ ✓ test/qa-report.test.ts > resolveQaRequest > uses a qa-request payload and defaults focus to empty 11ms
+ ✓ test/qa-report.test.ts > resolveQaRequest > builds the expected basket from a forwarded selection 1ms
+ ✓ test/qa-report.test.ts > resolveQaRequest > prefers the qa-request over a selection 1ms
+ ✓ test/qa-report.test.ts > resolveQaRequest > rejects a message without a usable payload 1ms
+ ✓ test/qa-report.test.ts > buildQaPrompt > lists the expected basket and phrases every focus check 1ms
+ ✓ test/qa-report.test.ts > buildQaPrompt > says the basket should be empty when nothing is expected, and skips empty sections 0ms
+ ✓ test/qa-report.test.ts > QaObservation > converts to a JSON schema for the structured output 6ms
+ ✓ test/qa-report.test.ts > toQaResult > computes the verdict in code from the page data, whatever the observation says 21ms
+ ✓ test/qa-report.test.ts > toQaResult > is not fooled by a name the QA model retyped: the shop's own spelling decides 1ms
+ ✓ test/qa-report.test.ts > toQaResult > is not fooled by a near-duplicate line the QA model relabelled as the expected product 0ms
+ ✓ test/qa-report.test.ts > toQaResult > uses the stored basket when the window never opened, and says so 1ms
+ ✓ test/qa-report.test.ts > toQaResult > notes when the window and the stored basket disagree, and trusts the window 1ms
+ ✓ test/qa-report.test.ts > toQaResult > falls back to the model's report when no page data was captured, and says so 1ms
+ ✓ test/qa-report.test.ts > toQaResult > ignores page results that do not look like the helper 0ms
+ ✓ test/qa-report.test.ts > summarizeQa > says the basket matches with the line count 0ms
+ ✓ test/qa-report.test.ts > summarizeQa > says when a match was read from the storage only, and adds the notes 0ms
+ ✓ test/qa-report.test.ts > summarizeQa > lists every difference and failed checks not already listed 1ms
+ ✓ test/qa-report.test.ts > summarizeQa > explains a failed absent check 1ms
+ ✓ test/qa-report.test.ts > readOnlyBasketGuard > denies page scripts that change the basket or are not one read call of the helper 1ms
+ ✓ test/qa-report.test.ts > readOnlyBasketGuard > denies every click except the basket icon 0ms
+ ✓ test/qa-report.test.ts > readOnlyBasketGuard > defers read calls, basket-icon clicks and other tools to the shop guard 1ms
+ ✓ test/redact.test.ts > hideForeignTabs > hides the title and URL of every tab that is not on the shop, keeping the list's shape 3ms
+ ✓ test/redact.test.ts > hideForeignTabs > hides the current page when it is not the shop 0ms
+ ✓ test/redact.test.ts > createTabRedactor > rewrites only Playwright responses that list foreign tabs 1ms
+ ✓ test/browser-result.test.ts > toolResultValue > reads the "### Result" section of the content blocks 3ms
+ ✓ test/browser-result.test.ts > toolResultValue > falls back to the text when there is no result section 1ms
+ ✓ test/env.test.ts > env > reads the order form details: all four or none 7ms
+ ✓ test/env.test.ts > env > wants the phone in international format 1ms
+ ✓ test/env.test.ts > env > parses the allowed Telegram user id as a number and rejects anything else 1ms
+ ✓ test/env.test.ts > env > treats blank values as unset 0ms
+ ✓ test/qa-diff.test.ts > diffBasket: differences > matches an identical basket 3ms
+ ✓ test/qa-diff.test.ts > diffBasket: differences > reports an expected product that is not in the basket as missing 1ms
+ ✓ test/qa-diff.test.ts > diffBasket: differences > reports a basket line nobody ordered as extra 0ms
+ ✓ test/qa-diff.test.ts > diffBasket: differences > reports a different quantity in both directions 0ms
+ ✓ test/qa-diff.test.ts > diffBasket: differences > lists expected-side differences in order first, then extras in basket order 0ms
+ ✓ test/qa-diff.test.ts > diffBasket: differences > sums duplicate basket lines with the same product before comparing 0ms
+ ✓ test/qa-diff.test.ts > diffBasket: differences > sums duplicate expected items with the same product 0ms
+ ✓ test/qa-diff.test.ts > diffBasket: differences > matches names case-insensitively with collapsed whitespace 0ms
+ ✓ test/qa-diff.test.ts > diffBasket: differences > treats typographic and straight apostrophes and dashes as the same 0ms
+ ✓ test/qa-diff.test.ts > diffBasket: differences > does not confuse products whose names only differ by a word 0ms
+ ✓ test/qa-diff.test.ts > diffBasket: differences > keeps the display name from the order for missing/quantity and from the basket for extras 0ms
+ ✓ test/qa-diff.test.ts > diffBasket: differences > ignores basket lines with quantity 0 0ms
+ ✓ test/qa-diff.test.ts > diffBasket: differences > reports every expected product as missing when the basket is empty 0ms
+ ✓ test/qa-diff.test.ts > diffBasket: differences > matches an empty order against an empty basket 0ms
+ ✓ test/qa-diff.test.ts > diffBasket: differences > flags everything as extra when nothing was ordered 0ms
+ ✓ test/qa-diff.test.ts > diffBasket: focus checks > quantity: passes when the basket shows the given quantity 1ms
+ ✓ test/qa-diff.test.ts > diffBasket: focus checks > quantity: fails when the basket shows another quantity 1ms
+ ✓ test/qa-diff.test.ts > diffBasket: focus checks > quantity: without expectedQty uses the expected basket quantity 0ms
+ ✓ test/qa-diff.test.ts > diffBasket: focus checks > present: passes for any positive quantity unless a quantity is given 1ms
+ ✓ test/qa-diff.test.ts > diffBasket: focus checks > absent: passes only when the product is gone 0ms
+ ✓ test/qa-diff.test.ts > diffBasket: focus checks > matches focus names with the same normalization as the diff 0ms
+ ✓ test/qa-diff.test.ts > diffBasket: focus checks > sums duplicate basket lines for focus checks 0ms
+ ✓ test/qa-diff.test.ts > diffBasket: focus checks > is a mismatch when a focus check fails even if the basket equals the order 0ms
+ ✓ test/qa-diff.test.ts > diffBasket: focus checks > keeps focus results in request order 0ms
+ ✓ test/explore-selection.test.ts > productQuestion > numbers the products as the table rows, with the price when there is one 2ms
+ ✓ test/explore-selection.test.ts > every-order (standing) products > the question says they are always added 1ms
+ ✓ test/explore-selection.test.ts > every-order (standing) products > resolves names to the exact list names and SKUs, and refuses names the list does not have 2ms
+ ✓ test/explore-selection.test.ts > every-order (standing) products > adds them to the selection: a product the user chose too adds up, nothing chosen means only them 1ms
+ ✓ test/explore-selection.test.ts > selectionFromRows > takes the exact name and SKU from the row the user chose, whatever name the model wrote 1ms
+ ✓ test/explore-selection.test.ts > selectionFromRows > falls back to the name for a row outside the table, and merges repeated products 0ms
+ ✓ test/explore-selection.test.ts > canonicalizeSelection > maps names to the exact list names, takes SKUs from the list and merges repeated products 0ms
+ ✓ test/explore-selection.test.ts > canonicalizeSelection > recognises a line copied from the question (number and price) and a unique SKU 0ms
+ ✓ test/explore-selection.test.ts > canonicalizeSelection > keeps unknown products as given and appends the note to the model notes 2ms
+ ✓ test/openclaw-config.test.ts > OpenClaw config > holds no secrets: the extension token is a ${VAR} reference 3ms
+ ✓ test/openclaw-config.test.ts > OpenClaw config > gives Telegram to COS alone, for the owner only 1ms
+ ✓ test/openclaw-config.test.ts > OpenClaw config > lets only COS spawn, one level deep, with no agent-to-agent messaging 0ms
+ ✓ test/openclaw-config.test.ts > OpenClaw config > gives COS the union of its children's tools (their ceiling) and each child only its own 2ms
+ ✓ test/openclaw-config.test.ts > OpenClaw config > matches the plugin's own per-agent tool policy 4ms
+ ✓ test/openclaw-config.test.ts > OpenClaw config > runs the repo Playwright MCP through the extension, blocking the checkout origins, with only the agents tools 0ms
+ ✓ test/openclaw-config.test.ts > OpenClaw config > loads our plugin with a valid config, and disables the built-in browser and dreaming 2ms
+ ✓ test/openclaw-config.test.ts > OpenClaw config > gives COS its memory: MEMORY.md tools inside its workspace, owner turns, keyword search, no automatic notes 1ms
+ ✓ test/openclaw-config.test.ts > OpenClaw config > passes the order form details to the plugin only when they are set 2ms
+ ✓ test/openclaw-config.test.ts > OpenClaw config > local: the project's gateway on loopback with token auth from the environment, no update checks or LAN discovery 1ms
+ ✓ test/openclaw-config.test.ts > OpenClaw config > e2e: an isolated offline gateway over CDP with the mocks 1ms
+ ✓ test/doctor-openclaw.test.ts > doctor: installed config > accepts what pnpm openclaw:config generates 2ms
+ ✓ test/doctor-openclaw.test.ts > doctor: installed config > reports a missing agent, a foreign workspace, a second Telegram owner and other users 0ms
+ ✓ test/doctor-openclaw.test.ts > doctor: loaded plugin > accepts a loaded plugin with every tool and hook 0ms
+ ✓ test/doctor-openclaw.test.ts > doctor: loaded plugin > reports what is missing 0ms
+ ✓ test/doctor-openclaw.test.ts > doctor: loaded plugin > reads JSON after a CLI banner line 1ms
+ ✓ test/plugin/flow.test.ts > a new order and changes to it > adds the every-order products, clears the basket on the first fill, and keeps it when the user adds products 37ms
+ ✓ test/plugin/flow.test.ts > a whole order through the plugin > selects, fills, verifies and only then sends the basket link 36ms
+ ✓ test/plugin/flow.test.ts > a whole order through the plugin > a mismatch leads to a fix and a focused re-check 8ms
+ ✓ test/plugin/flow.test.ts > the order form > Execute fills it, code checks it, QA reports it, and the final step says where it is 8ms
+ ✓ test/plugin/policy.test.ts > tool policy > cos may not call playwright__browser_navigate 10ms
+ ✓ test/plugin/policy.test.ts > tool policy > cos may not call poo_submit_qa 4ms
+ ✓ test/plugin/policy.test.ts > tool policy > cos may not call exec 6ms
+ ✓ test/plugin/policy.test.ts > tool policy > explore may not call message 4ms
+ ✓ test/plugin/policy.test.ts > tool policy > explore may not call playwright__browser_snapshot 6ms
+ ✓ test/plugin/policy.test.ts > tool policy > explore may not call sessions_spawn 3ms
+ ✓ test/plugin/policy.test.ts > tool policy > execute may not call playwright__browser_click 4ms
+ ✓ test/plugin/policy.test.ts > tool policy > execute may not call poo_submit_qa 3ms
+ ✓ test/plugin/policy.test.ts > tool policy > qa may not call poo_submit_execute 3ms
+ ✓ test/plugin/policy.test.ts > tool policy > qa may not call playwright__browser_run_code_unsafe 3ms
+ ✓ test/plugin/policy.test.ts > tool policy > leaves agents of other teams alone 3ms
+ ✓ test/plugin/policy.test.ts > tool policy > offers COS every plugin tool (its tools are the ceiling of its children) and each child only its own 4ms
+ ✓ test/plugin/policy.test.ts > tool policy > narrows every turn of our agents to their tools 10ms
+ ✓ test/plugin/policy.test.ts > tool policy > gives children their tools only while their task runs 6ms
+ ✓ test/plugin/policy.test.ts > workspace files in the prompts > leaves missing files (no "[MISSING]" lines) out of our agents' prompts 3ms
+ ✓ test/plugin/policy.test.ts > workspace files in the prompts > leaves agents of other teams alone 2ms
+ ✓ test/plugin/policy.test.ts > Explore reads only its skill > allows the skill file, relative to its workspace or absolute 2ms
+ ✓ test/plugin/policy.test.ts > Explore reads only its skill > denies /etc/passwd 2ms
+ ✓ test/plugin/policy.test.ts > Explore reads only its skill > denies ../../.env 2ms
+ ✓ test/plugin/policy.test.ts > Explore reads only its skill > denies AGENTS.md 2ms
+ ✓ test/plugin/policy.test.ts > Explore reads only its skill > denies skills/ask-what-to-buy/../../AGENTS.md 2ms
+ ✓ test/plugin/policy.test.ts > Explore reads only its skill > denies  2ms
+ ✓ test/plugin/policy.test.ts > COS's memory file > is created from the template on start, and never overwritten 5ms
+ ✓ test/plugin/policy.test.ts > COS's memory file > COS reads, writes and edits MEMORY.md, relative to its workspace or absolute 3ms
+ ✓ test/plugin/policy.test.ts > COS's memory file > COS may not touch AGENTS.md 3ms
+ ✓ test/plugin/policy.test.ts > COS's memory file > COS may not touch ../explore/skills/ask-what-to-buy/SKILL.md 3ms
+ ✓ test/plugin/flow.test.ts > the order form > a wrong field keeps the link back and leads to a new fill 13ms
+ ✓ test/plugin/flow.test.ts > questions and answers > needs a relayed question before an answer, and delivers the answer only to the asking session 6ms
+ ✓ test/plugin/flow.test.ts > questions and answers > shows COS the pending question with when it arrived and when it was relayed 4ms
+ ✓ test/plugin/flow.test.ts > questions and answers > keeps an undelivered answer and continues the task in a new session that replays the question and answer 5ms
+ ✓ test/plugin/flow.test.ts > task lifecycle > fails a run that ended without a result, cancels a killed one 5ms
+ ✓ test/plugin/flow.test.ts > task lifecycle > runs one task per agent, and never Execute and QA at the same time 4ms
+ ✓ test/plugin/flow.test.ts > task lifecycle > completes an update-product-list task with the applied changes, and the next question lists the product 7ms
+ ✓ test/plugin/flow.test.ts > task lifecycle > keeps the order and the tasks across a gateway restart 3ms
+ ✓ test/plugin/flow.test.ts > task lifecycle > /new resets the order and cancels its tasks 2ms
+ ✓ test/plugin/policy.test.ts > COS's memory file > COS may not touch memory/2026-10-11.md 5ms
+ ✓ test/plugin/policy.test.ts > COS's memory file > COS may not touch /etc/passwd 3ms
+ ✓ test/plugin/policy.test.ts > COS's memory file > COS may not touch ../../../.env 3ms
+ ✓ test/plugin/policy.test.ts > COS's memory file > COS may not touch  2ms
+ ✓ test/plugin/policy.test.ts > COS's memory file > only COS has it: children cannot write or search it, and Explore cannot read it 2ms
+ ✓ test/plugin/policy.test.ts > COS's memory file > without a memory file configured, COS file calls are refused 2ms
+ ✓ test/plugin/policy.test.ts > COS's messages > denies {"action":"react","emoji":"👍"} 3ms
+ ✓ test/plugin/policy.test.ts > COS's messages > denies {"action":"send","message":"hi","target":"telegram:1"} 2ms
+ ✓ test/plugin/policy.test.ts > COS's messages > denies {"action":"send","message":"hi","channel":"slack"} 2ms
+ ✓ test/plugin/policy.test.ts > COS's messages > denies {"action":"send","message":"hi","media":"/etc/passwd"} 2ms
+ ✓ test/plugin/policy.test.ts > COS's messages > denies {"action":"send","message":"  "} 2ms
+ ✓ test/plugin/policy.test.ts > COS's messages > sends plain text to the owner, with or without an explicit target 3ms
+ ✓ test/plugin/policy.test.ts > COS's messages > cancels outgoing Telegram messages to anyone else, and the basket link before verification 2ms
+ ✓ test/plugin/policy.test.ts > sessions_spawn > starts only tasks COS created, on their own agent, once 5ms
+ ✓ test/plugin/policy.test.ts > browser results > hide the user's other tabs before the model sees them 3ms
+ ✓ test/plugin/policy.test.ts > plugin manifest > declares every tool and mirrors the config schema 2ms
+
+ Test Files  17 passed (17)
+      Tests  302 passed (302)
+   Start at  15:46:17
+   Duration  1.11s (transform 45%, import 40%, tests 13%, worker 1%)
+
+  Transform  transforming modules took 2.90s · 45% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+

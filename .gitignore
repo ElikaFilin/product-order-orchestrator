@@ -6,6 +6,8 @@ node_modules/
 .playwright-mcp/
 coverage/
 *.log
+# Test logs cited as evidence in evidence/README.md
+!evidence/tests/*.log
 .DS_Store
 
 # OpenClaw plugin bundle (pnpm plugin:build)

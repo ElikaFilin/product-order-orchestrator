@@ -1,0 +1,118 @@
+e2e work dir: <e2e work dir>
+
+== scenario A
+PASS  [A] COS relays the product question word for word
+PASS  [A] the final message carries the link  (Кошик готовий. Відкрийте посилання, щоб перевірити і оформити замовлення:
+<a href="https://karashynyard.com.ua/#opencart">https://karashynyard.com.ua/#opencart</a>)
+PASS  [A] the browser basket holds exactly the order  ([{"name":"Філе зі стегна індички, 1 кг","qty":2},{"name":"Горіхова паста з фунндуком 350 г","qty":1}])
+PASS  [A] the link opens the prepared basket  ({"open":true,"lines":[{"name":"Філе зі стегна індички, 1 кг","qty":2},{"name":"Горіхова паста з фунндуком 350 г","qty":1}]})
+PASS  [A] QA verified the basket in its window before the link
+PASS  [A] all four agents ran inside the gateway  (side,cos,explore,execute,qa)
+PASS  [A] every scripted model step was valid
+PASS  [A] the bot wrote only to the owner
+PASS  [A] the user's other tab never reached a model
+PASS  [A] no prompt carries a [MISSING] workspace file
+PASS  [A] COS's SOUL.md and MEMORY.md are in every COS prompt  (16/16)
+
+== scenario B
+PASS  [B] COS relays the product question word for word
+PASS  [B] the new order gets the link without a mismatch
+PASS  [B] the browser basket holds exactly the order  ([{"name":"Філе зі стегна індички, 1 кг","qty":1}])
+PASS  [B] the link opens the prepared basket  ({"open":true,"lines":[{"name":"Філе зі стегна індички, 1 кг","qty":1}]})
+PASS  [B] QA verified the basket in its window before the link
+PASS  [B] Execute cleared the line of the earlier order
+PASS  [B] the link comes after the fix and the re-check
+PASS  [B] the browser basket holds exactly the order  ([{"name":"Філе зі стегна індички, 1 кг","qty":1},{"name":"Горіхова паста з фунндуком 350 г","qty":1}])
+PASS  [B] the link opens the prepared basket  ({"open":true,"lines":[{"name":"Філе зі стегна індички, 1 кг","qty":1},{"name":"Горіхова паста з фунндуком 350 г","qty":1}]})
+PASS  [B] QA verified the basket in its window before the link
+PASS  [B] the re-check knows what to check (the extra line is gone)
+PASS  [B] every scripted model step was valid
+PASS  [B] the bot wrote only to the owner
+PASS  [B] the user's other tab never reached a model
+PASS  [B] no prompt carries a [MISSING] workspace file
+PASS  [B] COS's SOUL.md and MEMORY.md are in every COS prompt  (37/37)
+
+== scenario C
+PASS  [C] COS confirms the product list update
+PASS  [C] the skill lists the new product
+PASS  [C] COS confirms what it remembered  (Запам'ятав: Філе зі стегна індички, 1 кг × 1 буде в кожному новому замовленні.)
+PASS  [C] COS's MEMORY.md holds the every-order product  (# Memory
+
+What the user asked the Chief of Staff to remember with "save this". The Chief of Staff keeps this file up to date.
+
+## Every order
+
+- Філе зі стегна індички, 1 кг × 1
+
+Products added to every new order: one line each, "- <exact product name> × <quantity>". None yet.
+
+## Notes
+
+None yet.
+)
+PASS  [C] the gateway restarted and polls Telegram again
+PASS  [C] the COS conversation with "save this" survived the restart
+PASS  [C] after the restart, /new starts a COS conversation without the "save this" message  (1 messages)
+PASS  [C] the next question lists the new product
+PASS  [C] the question says the saved product is always added  (Що замовити? Напишіть номер товару і кількість, кожен товар з нового рядка, у форматі «номер - кількість». Без кількості = 1 шт.
+Завжди додається до замовлення: Філе зі стегна індички, 1 кг × 1. Якщо більше нічого не треба, напишіть «0».
+Наприклад:
+1 - 2
+5
+
+1. Філе зі стегна індички, 1 кг — ≈665 грн
+2. Стегно індички, 1 кг — ≈595 грн
+3. Фарш з філе зі стегна індички, 1 кг — ≈735 грн
+4. Печінка індички, 500 г — ≈320 грн
+5. Котлети з фермерської індички та кролика, 900 г — ≈810 грн
+6. Котлети з фермерської індички, 900 г — ≈710 грн
+7. Філе зі стегна курки, 1 кг — ≈550 грн
+8. Шиї курки, 1 кг — ≈260 грн
+9. Фарш з філе стегна курки, 1 кг — ≈625 грн
+10. Печінка курочки, 500 г — ≈360 грн
+11. Серце яловиче, 1 кг — ≈430 грн
+12. Котлети з яловичини та телятини, 900 г — ≈710 грн
+13. Фарш з філе кролика, 500 г — ≈660 грн
+14. Печінка молодого кролика, 500 г — ≈655 грн
+15. Пельмені з фермерської індички, 700 г — ≈630 грн
+16. Масло ГХІ, 470 мл — ≈690 грн
+17. Натуральний фермерський мед, 1 л — ≈460 грн
+18. Яйця цесарки від фермерської цесарки, 10 шт — ≈360 грн
+19. Індичі яйця, від фермерської індички, 6 шт — ≈500 грн
+20. Курячі яйця від фермерських курей, 10 шт — ≈180 грн
+21. Горіхова паста з фунндуком 350 г — ≈850 грн
+22. Котлети по-київськи з індички, 900 г)
+PASS  [C] the order with the saved product gets the link
+PASS  [C] the browser basket holds exactly the order  ([{"name":"Горіхова паста з фунндуком 350 г","qty":1},{"name":"Філе зі стегна індички, 1 кг","qty":1}])
+PASS  [C] the link opens the prepared basket  ({"open":true,"lines":[{"name":"Горіхова паста з фунндуком 350 г","qty":1},{"name":"Філе зі стегна індички, 1 кг","qty":1}]})
+PASS  [C] QA verified the basket in its window before the link
+PASS  [C] every scripted model step was valid
+PASS  [C] the bot wrote only to the owner
+PASS  [C] the user's other tab never reached a model
+PASS  [C] no prompt carries a [MISSING] workspace file
+PASS  [C] COS's SOUL.md and MEMORY.md are in every COS prompt  (23/23)
+
+== scenario D
+PASS  [D] COS relays the product question word for word
+PASS  [D] the order still completes
+PASS  [D] the early basket link never reached the user
+PASS  [D] the browser basket holds exactly the order  ([{"name":"Філе зі стегна індички, 1 кг","qty":1}])
+PASS  [D] the link opens the prepared basket  ({"open":true,"lines":[{"name":"Філе зі стегна індички, 1 кг","qty":1}]})
+PASS  [D] QA verified the basket in its window before the link
+PASS  [D] refused and recorded: COS sends the basket link before verification  ([{"type":"text","text":"The basket is not verified yet, so the link cannot be sent. Order 622397c4-ef11-4f1a-8fa4-6b59e65a0550 (shop: karashynyard)\nExpected ba)
+PASS  [D] refused and recorded: COS writes a file other than its memory  ([{"type":"text","text":"Only your memory file can be read or changed: MEMORY.md."}])
+PASS  [D] refused and recorded: Explore reads a file outside its skill  ([{"type":"text","text":"Only your skill file can be read: skills/ask-what-to-buy/SKILL.md."}])
+PASS  [D] refused and recorded: Execute navigates to another site  ([{"type":"text","text":"Navigation to https://example.com/ is not allowed. Allowed: https://karashynyard.com.ua and about:blank."}])
+PASS  [D] refused and recorded: Execute runs free JavaScript  ([{"type":"text","text":"Page scripts may only call the shop helper: one call per script, e.g. window.__poo.status() or window.__poo.setQty(\"<exact name>\", 2);)
+PASS  [D] refused and recorded: Execute touches the order form  ([{"type":"text","text":"Blocked by the karashynyard safety rules (/Відправити\\s+замовлення/i): agents never touch the order form or submit orders."}])
+PASS  [D] refused and recorded: Execute clicks  ([{"type":"text","text":"Tool playwright__browser_click not found"}])
+PASS  [D] refused and recorded: QA changes the basket  ([{"type":"text","text":"QA is read-only: it must not change the basket. Page scripts may only read it: one call per script, e.g. window.__poo.status() or window)
+PASS  [D] refused and recorded: a sub-agent messages the user  ([{"type":"text","text":"Tool message not found"}])
+PASS  [D] every scripted model step was valid
+PASS  [D] the bot wrote only to the owner
+PASS  [D] the user's other tab never reached a model
+PASS  [D] no prompt carries a [MISSING] workspace file
+PASS  [D] COS's SOUL.md and MEMORY.md are in every COS prompt  (18/18)
+
+E2E OK (65 checks; report <e2e work dir>/report.json)
+exit 0
