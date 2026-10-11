@@ -12,6 +12,7 @@ import {
   type BasketOp,
   type QaFocus,
 } from '../core/contracts.js';
+import { describeOrderForm } from '../core/order-form.js';
 import { describeDifference, type OrderState } from '../core/order-state.js';
 import type { Store, SubAgentRequest, TaskRecord } from './store.js';
 
@@ -61,10 +62,15 @@ export function buildRequest(state: OrderState, args: TaskArgs): SubAgentRequest
 
 const json = (value: unknown) => JSON.stringify(value);
 
-function finalMessageStep(s: CosSettings): string {
+function finalMessageStep(s: CosSettings, state: OrderState): string {
+  const form =
+    state.lastQa?.orderForm?.status === 'ok'
+      ? ' Also say that the order form (name, phone, delivery, address) is already filled in the shop tab the agents left open ' +
+        'there: the user checks it and presses "Відправити замовлення" in that tab; the link opens the basket in a new tab, where the form is empty.'
+      : '';
   return (
     `Send the final message with message ${json({ action: 'send', message: `… ${CART_LINK_PLACEHOLDER} …` })}: the plugin puts the ` +
-    `basket link (${s.cartUrl}) where ${CART_LINK_PLACEHOLDER} is. Say that it opens the prepared basket in ${s.basketBrowser}, where the basket lives.`
+    `basket link (${s.cartUrl}) where ${CART_LINK_PLACEHOLDER} is. Say that it opens the prepared basket in ${s.basketBrowser}, where the basket lives.${form}`
   );
 }
 
@@ -126,11 +132,18 @@ function completedStep(state: OrderState, task: TaskRecord, s: CosSettings): str
     return `${note}Next: poo_task ${json({ agent: 'qa' })}; the re-check focus is derived automatically.${replace}`;
   }
   if (qa) {
-    if (state.isVerified()) return `Basket verified. ${finalMessageStep(s)}`;
+    if (state.isVerified()) return `Basket verified. ${finalMessageStep(s, state)}`;
     if (!qa.modalOpened && state.openDifferences().length === 0) {
       return (
         'The basket matches, but QA could not open the basket window, so it was not checked the way the user sees it. ' +
         `Tell the user in one sentence and offer to check again (poo_task ${json({ agent: 'qa' })}). Do not send the cart link yet.`
+      );
+    }
+    if (state.openDifferences().length === 0 && qa.orderForm && qa.orderForm.status !== 'ok') {
+      return (
+        `The basket matches, but the order form in Execute's tab is not right. ${describeOrderForm(qa.orderForm)} Tell the user in one ` +
+        `short message and offer to fill it again: poo_task ${json({ agent: 'execute' })} (the same basket, so its lines do not change, ` +
+        'and the form is filled in a new tab), then qa. Do not send the cart link yet.'
       );
     }
     return (
@@ -159,7 +172,10 @@ export function taskReport(store: Store, task: TaskRecord, s: CosSettings): Reco
     ...(selection ? { selection: selection.items.map((i) => ({ name: i.name, qty: i.qty })), ...(selection.notes ? { notes: selection.notes } : {}) } : {}),
     ...(listUpdate ? { productList: { added: listUpdate.added, removed: listUpdate.removed, size: listUpdate.products.length } } : {}),
     ...(executed
-      ? { operations: executed.ops.map((o) => ({ name: o.name, targetQty: o.targetQty, status: o.status, actualQty: o.actualQty, detail: o.detail })) }
+      ? {
+          operations: executed.ops.map((o) => ({ name: o.name, targetQty: o.targetQty, status: o.status, actualQty: o.actualQty, detail: o.detail })),
+          ...(executed.orderForm ? { orderForm: executed.orderForm } : {}),
+        }
       : {}),
     ...(qa
       ? {
@@ -167,6 +183,7 @@ export function taskReport(store: Store, task: TaskRecord, s: CosSettings): Reco
           modalOpened: qa.modalOpened,
           differences: qa.differences,
           failedChecks: qa.focus.filter((f) => !f.passed),
+          ...(qa.orderForm ? { orderForm: qa.orderForm } : {}),
           ...(qa.total === undefined ? {} : { total: qa.total }),
           ...(qa.notes ? { notes: qa.notes } : {}),
         }

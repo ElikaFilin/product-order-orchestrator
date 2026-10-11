@@ -32,6 +32,18 @@
       "browserMode": { "type": "string", "enum": ["extension", "cdp"], "default": "extension" },
       "browserToolPrefix": { "type": "string", "minLength": 1, "default": "playwright__" },
       "basketBrowser": { "type": "string", "minLength": 1 },
+      "checkout": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "phone", "delivery", "address"],
+        "description": "The user's details for the shop's order form: Execute fills it, never sends it",
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "phone": { "type": "string", "pattern": "^\\+\\d{8,15}$", "description": "International format, e.g. +380671234567" },
+          "delivery": { "type": "string", "minLength": 1, "description": "The delivery option exactly as the shop shows it" },
+          "address": { "type": "string", "minLength": 1 }
+        }
+      },
       "stateFile": { "type": "string", "minLength": 1 },
       "runTimeoutSeconds": {
         "type": "object",

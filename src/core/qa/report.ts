@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { CartLine, normalizeName, type Difference, type QaRequest, type QaResult } from '../contracts.js';
+import { describeOrderForm } from '../order-form.js';
 import { CartRead, ModalRead } from '../shops/helper-api.js';
 import { diffBasket, type FocusResult } from './diff.js';
 
@@ -45,19 +46,25 @@ interface BasketSeen {
   notes: string[];
 }
 
+/**
+ * The verdict covers the basket QA saw and the order form check of Execute's tab that the request carries (QA's own
+ * tab cannot see that form).
+ */
 export function toQaResult(request: QaRequest, observation: QaObservation, cartUrl: string, page?: PageReads): QaResult {
   const seen = basketSeen(observation, page);
   const diff = diffBasket(request.expected, seen.lines, request.focus);
   const notes = [...seen.notes, observation.notes?.trim()].filter((n): n is string => Boolean(n));
+  const formOk = request.orderForm === undefined || request.orderForm.status === 'ok';
   return {
     type: 'qa-result',
     shopId: request.shopId,
-    verdict: diff.verdict,
+    verdict: diff.verdict === 'match' && formOk ? 'match' : 'mismatch',
     modalOpened: seen.modalOpened,
     cart: seen.lines,
     ...(seen.total === null ? {} : { total: seen.total }),
     differences: diff.differences,
     focus: diff.focus,
+    ...(request.orderForm ? { orderForm: request.orderForm } : {}),
     cartUrl,
     ...(notes.length ? { notes: notes.join(' ') } : {}),
   };
@@ -127,10 +134,11 @@ function describeFailedCheck(f: FocusResult): string {
 
 export function summarizeQa(result: QaResult): string {
   const notes = result.notes ? [`Notes: ${result.notes}`] : [];
-  if (result.verdict === 'match') {
+  const form = result.orderForm ? [describeOrderForm(result.orderForm)] : [];
+  if (result.differences.length === 0 && result.focus.every((f) => f.passed)) {
     const lines = result.cart.filter((l) => l.qty > 0).length;
     const where = result.modalOpened ? '' : ', read from the browser storage only';
-    return [`Basket matches (${lines} line${lines === 1 ? '' : 's'}${where}).`, ...notes].join('\n');
+    return [`Basket matches (${lines} line${lines === 1 ? '' : 's'}${where}).`, ...form, ...notes].join('\n');
   }
   // A failed focus check usually repeats a difference for the same product; list it only once.
   const listed = new Set(result.differences.map((d) => normalizeName(d.name)));
@@ -138,5 +146,5 @@ export function summarizeQa(result: QaResult): string {
     ...result.differences.map(describeDifference),
     ...result.focus.filter((f) => !f.passed && !listed.has(normalizeName(f.name))).map(describeFailedCheck),
   ];
-  return ['Basket differs from the order:', ...items.map((s) => `- ${s}`), ...notes].join('\n');
+  return ['Basket differs from the order:', ...items.map((s) => `- ${s}`), ...form, ...notes].join('\n');
 }

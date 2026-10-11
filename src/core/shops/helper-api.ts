@@ -27,6 +27,20 @@ export const CartRead = z.object({
 });
 export type CartRead = z.infer<typeof CartRead>;
 
+/**
+ * `readOrderForm()` and `fillOrderForm(...)`: the order form's fields as the page holds them (`delivery` is the
+ * chosen option, null when none is); `detail` says what went wrong while filling.
+ */
+export const OrderFormRead = z.object({
+  found: z.boolean(),
+  name: z.string(),
+  phone: z.string(),
+  delivery: z.string().nullable(),
+  address: z.string(),
+  detail: z.string().optional(),
+});
+export type OrderFormRead = z.infer<typeof OrderFormRead>;
+
 /** `setQty(name, qty)`: what one basket change did. */
 export const SetQtyRead = z.object({
   status: z.enum(['ok', 'not_found', 'failed']),

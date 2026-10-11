@@ -2,6 +2,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { z } from 'zod';
 import { OPENCLAW_TOOL_PREFIX } from '../core/browser/toolset.js';
+import { CheckoutDetails } from '../core/contracts.js';
 
 export const PLUGIN_ID = 'product-order-orchestrator';
 
@@ -20,6 +21,8 @@ export const PluginConfig = z.object({
   browserToolPrefix: z.string().min(1).default(OPENCLAW_TOOL_PREFIX),
   /** Where the basket link must be opened, as COS tells the user ("Chrome, in your "Home" profile"). */
   basketBrowser: z.string().min(1).optional(),
+  /** The user's details for the shop's order form: Execute fills it (never sends it). Unset: the user fills it. */
+  checkout: CheckoutDetails.optional(),
   /** Where the order and the tasks are kept between gateway restarts. */
   stateFile: z.string().min(1).optional(),
   /** Longest run of one sub-agent task (a run ends when the agent asks the user, so these are short). */

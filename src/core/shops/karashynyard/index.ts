@@ -28,8 +28,8 @@ export const karashynyard: ShopAdapter = {
     /Ваше\s+ім|номер\s+телефону|Нової\s+пошти|Новою\s+поштою|тушонку/i, // checkout field labels
   ],
   helperSource: HELPER_SOURCE,
-  helperApi: { read: ['status', 'find', 'readCart', 'readModal'], write: ['setQty'] },
+  helperApi: { read: ['status', 'find', 'readCart', 'readModal', 'readOrderForm'], write: ['setQty', 'fillOrderForm'] },
   cartOpeners: [CART_ICON, HEADER_CART_ICON],
-  executePlaybook: (tools) => renderExecutePlaybook(tools, URLS),
+  executePlaybook: (tools, opts) => renderExecutePlaybook(tools, URLS, opts),
   qaPlaybook: (tools) => renderQaPlaybook(tools, URLS),
 };

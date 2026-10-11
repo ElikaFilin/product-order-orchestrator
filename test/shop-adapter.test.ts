@@ -25,6 +25,8 @@ function renderedCalls(markdown: string): Array<{ tool: string; input: Record<st
   return [...markdown.matchAll(/`(playwright__\w+)` `(\{[^`]*\})`/g)].map((m) => ({ tool: m[1]!, input: JSON.parse(m[2]!) }));
 }
 
+const CHECKOUT = { name: 'Тарас Тестовий', phone: '+380671234567', delivery: 'Доставка Новою поштою', address: 'вул. Тестова 1, Київ' };
+
 const forbidden = (text: string) => karashynyard.forbiddenPatterns.some((p) => text.search(p) !== -1);
 
 describe('karashynyard adapter', () => {
@@ -104,6 +106,39 @@ describe.each(VARIANTS)('playbooks for $name', ({ mode, firstTool }) => {
   });
 });
 
+describe.each(VARIANTS)('Execute playbook that fills the order form, for $name', ({ mode }) => {
+  const tools = toolset('execute', mode);
+  const playbook = karashynyard.executePlaybook(tools, { fillOrderForm: true });
+  const guard = () => {
+    const g = createBrowserGuard(karashynyard, tools, { checkout: CHECKOUT });
+    if (!tools.startsInOwnTab) g(tools.tool('browser_tabs'), { action: 'new', url: karashynyard.baseUrl });
+    return g;
+  };
+
+  it('fills the form without arguments and reads it back, after the basket check', () => {
+    const codes = renderedCalls(playbook).map((c) => String(c.input[tools.evalTool.codeField] ?? ''));
+    const fill = codes.indexOf('() => window.__poo.fillOrderForm()');
+    expect(fill).toBeGreaterThan(codes.lastIndexOf('() => window.__poo.readCart()'));
+    expect(codes.indexOf('() => window.__poo.readOrderForm()')).toBeGreaterThan(fill);
+  });
+
+  it('renders only calls its guard lets through, and never closes the tab that holds the form', () => {
+    const g = guard();
+    for (const { tool, input } of renderedCalls(playbook)) expect(g(tool, input)?.deny, `${tool} ${JSON.stringify(input)}`).toBeUndefined();
+    expect(renderedCalls(playbook).some((c) => c.input.action === 'close')).toBe(false);
+    expect(playbook).toMatch(/Keep your tab open/);
+  });
+
+  it('still forbids sending the order and typing personal data', () => {
+    expect(playbook).toMatch(/never\s+press "Відправити замовлення"/);
+    expect(playbook).toMatch(/never type personal data/);
+  });
+
+  it('is the plain basket playbook without the option', () => {
+    expect(karashynyard.executePlaybook(tools)).not.toContain('fillOrderForm');
+  });
+});
+
 describe('karashynyard forbiddenPatterns', () => {
   it.each([
     'window.__poo.setQty("Філе зі стегна індички, 1 кг", 2)',
@@ -112,6 +147,8 @@ describe('karashynyard forbiddenPatterns', () => {
     'window.__poo.readCart()',
     'window.__poo.readModal()',
     'window.__poo.status()',
+    'window.__poo.fillOrderForm()',
+    'window.__poo.readOrderForm()',
     '.t706__carticon-wrapper',
     'a.t-menuwidgeticons__link_cart',
     '.t706__cartwin.t706__cartwin_showed',
@@ -161,7 +198,23 @@ describe('karashynyard helperSource', () => {
     const first = context.window.__poo;
     vm.runInContext(karashynyard.helperSource, context as unknown as vm.Context);
     expect(context.window.__poo).toBe(first);
-    expect(Object.keys(first).sort()).toEqual(['closeCart', 'find', 'openCart', 'readCart', 'readModal', 'setQty', 'status', 'version']);
+    expect(Object.keys(first).sort()).toEqual([
+      'closeCart',
+      'fillOrderForm',
+      'find',
+      'openCart',
+      'readCart',
+      'readModal',
+      'readOrderForm',
+      'setQty',
+      'status',
+      'version',
+    ]);
+  });
+
+  it('readOrderForm reports a missing form instead of throwing', () => {
+    const { window } = install(null);
+    expect(window.__poo.readOrderForm!()).toEqual({ found: false, name: '', phone: '', delivery: null, address: '' });
   });
 
   it('readCart ignores deleted and empty lines and sums units and amounts', () => {

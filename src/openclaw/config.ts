@@ -8,6 +8,7 @@ import path from 'node:path';
 import type { BrowserConnection } from '../browser/connection.js';
 import { playwrightMcpArgs, playwrightMcpCli } from '../browser/playwright-mcp.js';
 import { SUB_AGENTS, type AgentName } from '../core/agents.js';
+import type { CheckoutDetails } from '../core/contracts.js';
 import { EXECUTE_BROWSER_TOOLS, OPENCLAW_TOOL_PREFIX, PLAYWRIGHT_SERVER, QA_BROWSER_TOOLS } from '../core/browser/toolset.js';
 import { SKILL_NAME, skillFile } from '../core/explore/product-list.js';
 import { listShops } from '../core/shops/index.js';
@@ -28,6 +29,8 @@ export interface OpenClawConfigOptions {
   browser: BrowserConnection;
   /** Where the basket link must be opened, as COS tells the user. */
   basketBrowser?: string;
+  /** The user's order form details (written into the plugin config as they are; the file is not in git). */
+  checkout?: CheckoutDetails;
   /** Snapshots and screenshots of the browser tools. */
   playwrightOutputDir: string;
   /** The plugin's order and task state (default: under OPENCLAW_STATE_DIR). */
@@ -142,6 +145,7 @@ export function buildOpenClawConfig(o: OpenClawConfigOptions): Record<string, un
             browserToolPrefix: OPENCLAW_TOOL_PREFIX,
             runTimeoutSeconds: RUN_TIMEOUT_SECONDS,
             ...(o.basketBrowser ? { basketBrowser: o.basketBrowser } : {}),
+            ...(o.checkout ? { checkout: o.checkout } : {}),
             ...(o.stateFile ? { stateFile: o.stateFile } : {}),
           },
         },

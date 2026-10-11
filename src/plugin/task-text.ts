@@ -16,6 +16,8 @@ export interface TaskTextDeps {
   productList: Pick<ProductList, 'read'>;
   browserMode: BrowserMode;
   browserToolPrefix: string;
+  /** The user's checkout details are configured: Execute fills the order form. */
+  fillOrderForm: boolean;
 }
 
 const ASK =
@@ -82,7 +84,8 @@ async function body(task: TaskRecord, deps: TaskTextDeps): Promise<string> {
     case 'execute-request': {
       const shop = getShop(request.shopId);
       const tools = browserToolset({ role: 'execute', mode: deps.browserMode, prefix: deps.browserToolPrefix });
-      return [buildExecutePrompt(request, shop, task.instruction), shop.executePlaybook(tools), ASK].join('\n\n');
+      const playbook = shop.executePlaybook(tools, { fillOrderForm: deps.fillOrderForm });
+      return [buildExecutePrompt(request, shop, task.instruction), playbook, ASK].join('\n\n');
     }
     case 'qa-request': {
       const shop = getShop(request.shopId);

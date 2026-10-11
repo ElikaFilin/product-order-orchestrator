@@ -11,7 +11,12 @@
  *  - after an add the cart window opens (`data-opencart-onorder`), covering the page;
  *  - the cart window's minus/delete controls change the basket; delete keeps a 4 s undo row that only
  *    finishes while the window stays open;
- *  - the basket lives in localStorage `tcart`; deleted lines linger there with `deleted: "yes"`.
+ *  - the basket lives in localStorage `tcart`; deleted lines linger there with `deleted: "yes"`;
+ *  - the order form sits inside the cart window and keeps its values only in its tab (nothing is stored); the phone
+ *    mask shows the country code (+380 by default), takes the rest of the number in a visible field and writes the
+ *    formatted number ("+380 (67) 123-45-67") into a hidden `Phone` input.
+ *
+ * The selectors avoid the words the browser guard blocks in agent input, so this source never matches them.
  *
  * Written as plain JavaScript inside a string (not a serialized TS function) because transpilers may
  * inject helpers that do not exist in the page. String.raw keeps the regex backslashes as written; the
@@ -173,6 +178,64 @@ const BODY = String.raw`
     await closeCart();
   };
 
+  var ORDER_FORM = '.t706__cartwin form';
+  var NAME_FIELD = 'input[name="Name"]';
+  var PHONE_TYPED = 'input[type="tel"][data-phonemask-code]';
+  var PHONE_RESULT = 'input[name="Phone"]';
+  var DELIVERY_OPTIONS = 'input[type="radio"][name="Delivery"]';
+  var ADDRESS_FIELD = '[data-field-name^="Адреса"] textarea';
+  var orderForm = function () { return document.querySelector(ORDER_FORM); };
+  // Through the native setter plus the events a typing user fires, so Tilda's mask and validation see the value.
+  var setField = function (el, value) {
+    var proto = el.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+    Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, value);
+    ['input', 'change', 'blur'].forEach(function (type) { el.dispatchEvent(new Event(type, { bubbles: true })); });
+  };
+  var digits = function (s) { return String(s == null ? '' : s).replace(/\D/g, ''); };
+  var readOrderForm = function () {
+    var f = orderForm();
+    if (!f) return { found: false, name: '', phone: '', delivery: null, address: '' };
+    var value = function (el) { return el ? String(el.value).trim() : ''; };
+    var chosen = f.querySelector(DELIVERY_OPTIONS + ':checked');
+    return {
+      found: true,
+      name: value(f.querySelector(NAME_FIELD)),
+      phone: value(f.querySelector(PHONE_RESULT)),
+      delivery: chosen ? chosen.value : null,
+      address: value(f.querySelector(ADDRESS_FIELD)),
+    };
+  };
+  // Fills the form in the open cart window, so the user finds it ready in this tab. Never sends it.
+  var fillOrderForm = async function (name, phone, delivery, address) {
+    var withDetail = function (detail) { return Object.assign(readOrderForm(), { detail: detail }); };
+    if (!(await waitFor(ready, 15000))) return withDetail('the shop page is not ready');
+    if (readCart().lines.length === 0) return withDetail('the basket is empty, so there is nothing to order');
+    var problems = [];
+    if (!(await openCart()).open) problems.push('the cart window did not open');
+    var f = orderForm();
+    if (!f) return withDetail('the order form was not found in the cart window');
+    var nameField = f.querySelector(NAME_FIELD);
+    if (nameField) setField(nameField, String(name)); else problems.push('no name field');
+    var tel = await waitFor(function () { return f.querySelector(PHONE_TYPED); }, 10000);
+    if (!tel) {
+      problems.push('the phone field is not ready');
+    } else {
+      var code = digits(tel.getAttribute('data-phonemask-code')), number = digits(phone);
+      if (number.indexOf(code) !== 0) problems.push('the phone field has country code +' + code + ', the number is ' + phone);
+      else setField(tel, number.slice(code.length));
+    }
+    var options = Array.from(f.querySelectorAll(DELIVERY_OPTIONS));
+    var option = options.find(function (o) { return norm(o.value) === norm(delivery); });
+    if (!option) problems.push('no delivery option "' + delivery + '"; options: ' + options.map(function (o) { return o.value; }).join(' | '));
+    else if (!option.checked) option.click();
+    var addressField = f.querySelector(ADDRESS_FIELD);
+    if (addressField) setField(addressField, String(address)); else problems.push('no address field');
+    await sleep(300); // the phone mask writes the formatted number into its hidden field
+    var result = readOrderForm();
+    if (problems.length) result.detail = problems.join('; ');
+    return result;
+  };
+
   var setQty = async function (name, qty) {
     var target = Number(qty);
     var label = String(name);
@@ -231,6 +294,8 @@ const BODY = String.raw`
     openCart: openCart,
     closeCart: closeCart,
     setQty: setQty,
+    readOrderForm: readOrderForm,
+    fillOrderForm: fillOrderForm,
   };
 `;
 

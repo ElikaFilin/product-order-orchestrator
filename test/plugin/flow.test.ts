@@ -93,9 +93,12 @@ describe('a whole order through the plugin', () => {
     const execute = await spawn('execute');
     expect(String(execute.params.task)).toContain(`${PW}browser_tabs`);
     expect(String(execute.params.task)).toContain('poo_submit_execute');
+    // No CHECKOUT_* settings: no order form step, and the model cannot fill it.
+    expect(String(execute.params.task)).not.toContain('fillOrderForm');
     const x = execute.ctx;
     expect((await host.before(`${PW}browser_evaluate`, { function: '() => window.__poo.status()' }, x)).block).toBe(true); // own tab first
     expect((await host.before(`${PW}browser_tabs`, { action: 'new', url: karashynyard.baseUrl }, x)).block).toBeUndefined();
+    expect((await host.before(`${PW}browser_evaluate`, { function: '() => window.__poo.fillOrderForm()' }, x)).blockReason).toMatch(/not set up/);
     for (const [name, qty, after] of [[FILLET, 2, 2], [THIGH, 1, 1]] as const) {
       const call = await host.before(`${PW}browser_evaluate`, { function: `() => window.__poo.setQty(${JSON.stringify(name)}, ${qty})` }, x);
       expect(String(call.params!.function)).toContain('window.__poo');
@@ -112,6 +115,7 @@ describe('a whole order through the plugin', () => {
       expect.objectContaining({ name: THIGH, status: 'ok', actualQty: 1 }),
     ]);
     expect(executed.next).toContain('poo_task {"agent":"qa"}');
+    expect(executed).not.toHaveProperty('orderForm');
     await host.emit('subagent_ended', { targetSessionKey: x.sessionKey, reason: 'subagent-complete', outcome: 'ok', runId: x.runId }, {});
 
     // QA: read-only, clicks the basket icon, the verdict comes from the page.
@@ -126,6 +130,8 @@ describe('a whole order through the plugin', () => {
     await host.tool('poo_submit_qa', { modalOpened: true, readVia: 'modal', lines: [{ name: FILLET, qty: 2 }], total: 1925 }, q);
     const verified = await host.tool('poo_task_status', { taskId: qa.taskId }, COS);
     expect(verified).toMatchObject({ verdict: 'match', modalOpened: true, differences: [] });
+    expect(verified).not.toHaveProperty('orderForm');
+    expect(verified.next).not.toContain('Відправити замовлення');
     expect(verified.next).toContain('{{cart_link}}');
     expect(rt.store.order.isVerified()).toBe(true);
 
@@ -149,6 +155,78 @@ describe('a whole order through the plugin', () => {
     rt.store.update(() => rt.store.touch(rt.store.task(fix.taskId)!, { state: 'completed' }));
     const recheck = await spawn('qa', {}, 2);
     expect(String(recheck.params.task)).toContain(`"${THIGH}": must no longer be in the basket`);
+  });
+});
+
+describe('the order form', () => {
+  const CHECKOUT = { name: 'Тарас Тестовий', phone: '+380671234567', delivery: 'Доставка Новою поштою', address: 'вул. Тестова 1, Київ' };
+  const FILLED = { found: true, name: 'Тарас Тестовий', phone: '+380 (67) 123-45-67', delivery: 'Доставка Новою поштою', address: 'вул. Тестова 1, Київ' };
+
+  /** Execute fills the basket and the form; returns COS's report of the task. */
+  async function execute(n: number, form: Record<string, unknown>) {
+    const run = await spawn('execute', {}, n);
+    const x = run.ctx;
+    await host.before(`${PW}browser_tabs`, { action: 'new', url: karashynyard.baseUrl }, x);
+    const page = async (code: string, value: unknown) => {
+      const call = await host.before(`${PW}browser_evaluate`, { function: code }, x);
+      expect(call.block).toBeUndefined();
+      await host.result(`${PW}browser_evaluate`, call.params!, pageResult(value), x, call.toolCallId);
+      return String(call.params!.function);
+    };
+    await page(`() => window.__poo.setQty(${JSON.stringify(FILLET)}, 2)`, { status: 'ok', name: FILLET, before: 0, after: 2 });
+    await page('() => window.__poo.readCart()', { lines: [{ name: FILLET, qty: 2 }], total: 1330 });
+    const filled = await page('() => window.__poo.fillOrderForm()', form);
+    expect(filled).toContain('fillOrderForm("Тарас Тестовий", "+380671234567", "Доставка Новою поштою", "вул. Тестова 1, Київ")');
+    await page('() => window.__poo.readOrderForm()', form);
+    // The model claims nothing about the form; the plugin checks the page data.
+    await host.tool('poo_submit_execute', { ops: [{ name: FILLET, targetQty: 2, status: 'ok' }], cart: [] }, x);
+    await host.emit('subagent_ended', { targetSessionKey: x.sessionKey, reason: 'subagent-complete', outcome: 'ok', runId: x.runId }, {});
+    return { run, report: await host.tool('poo_task_status', { taskId: run.taskId }, COS) };
+  }
+
+  /** QA sees the right basket in its own tab; returns COS's report of the task. */
+  async function qa(n: number) {
+    const run = await spawn('qa', {}, n);
+    const q = run.ctx;
+    await host.before(`${PW}browser_tabs`, { action: 'new', url: karashynyard.baseUrl }, q);
+    const modal = await host.before(`${PW}browser_evaluate`, { function: '() => window.__poo.readModal()' }, q);
+    await host.result(`${PW}browser_evaluate`, modal.params!, pageResult({ open: true, lines: [{ name: FILLET, qty: 2, amount: 1330 }], total: 1330 }), q, modal.toolCallId);
+    expect((await host.before(`${PW}browser_evaluate`, { function: '() => window.__poo.fillOrderForm()' }, q)).blockReason).toMatch(/read-only/);
+    await host.tool('poo_submit_qa', { modalOpened: true, readVia: 'modal', lines: [{ name: FILLET, qty: 2 }], total: 1330 }, q);
+    return host.tool('poo_task_status', { taskId: run.taskId }, COS);
+  }
+
+  beforeEach(() => {
+    start({ checkout: CHECKOUT });
+    rt.store.update(() => rt.store.order.applySelection({ type: 'selection', shopId: 'karashynyard', items: [{ name: FILLET, qty: 2 }] }));
+  });
+
+  it('Execute fills it, code checks it, QA reports it, and the final step says where it is', async () => {
+    const { run, report } = await execute(1, FILLED);
+    expect(String(run.params.task)).toContain('window.__poo.fillOrderForm()');
+    expect(String(run.params.task)).toContain('Keep your tab open');
+    expect(report.orderForm).toMatchObject({ status: 'ok' });
+    expect(report.summary).toContain("Order form: filled in Execute's tab and checked");
+
+    const checked = await qa(1);
+    expect(checked).toMatchObject({ verdict: 'match', orderForm: { status: 'ok' } });
+    expect(rt.store.order.isVerified()).toBe(true);
+    expect(checked.next).toContain('{{cart_link}}');
+    expect(checked.next).toContain('Відправити замовлення');
+  });
+
+  it('a wrong field keeps the link back and leads to a new fill', async () => {
+    await execute(1, { ...FILLED, phone: '' });
+    const checked = await qa(1);
+    expect(checked).toMatchObject({ verdict: 'mismatch', differences: [], orderForm: { status: 'mismatch' } });
+    expect(rt.store.order.isVerified()).toBe(false);
+    expect(checked.next).toContain('order form');
+    expect(checked.next).toContain('poo_task {"agent":"execute"}');
+    expect((await host.before('message', { action: 'send', message: 'Готово: {{cart_link}}' }, COS)).block).toBe(true);
+
+    await execute(2, FILLED);
+    expect((await qa(2)).verdict).toBe('match');
+    expect(rt.store.order.isVerified()).toBe(true);
   });
 });
 

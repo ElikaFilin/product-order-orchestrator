@@ -88,7 +88,12 @@ export function registerHooks(host: PluginHost, rt: Runtime): void {
     if (!task) return block('Create the task with poo_task first, then sessions_spawn {"agentId": <agent>, "task": <taskId>}.');
     if (event.params.agentId !== task.agent) return block(`Task ${task.id} belongs to the ${task.agent} agent: use agentId "${task.agent}".`);
     if (task.state !== 'created' && task.state !== 'answered') return block(`Task ${task.id} is ${task.state}. ${nextStep(store, task, settings)}`);
-    const text = await spawnTaskText(task, { productList: rt.productList, browserMode: config.browserMode, browserToolPrefix: prefix });
+    const text = await spawnTaskText(task, {
+      productList: rt.productList,
+      browserMode: config.browserMode,
+      browserToolPrefix: prefix,
+      fillOrderForm: config.checkout !== undefined,
+    });
     const spawns = store.update(() => store.touch(task, { spawns: task.spawns + 1 }).spawns);
     return {
       params: {
@@ -320,8 +325,8 @@ function runGuard(rt: Runtime, task: TaskRecord): ToolGuard {
   const shop = getShop(task.request.shopId);
   const role = task.agent === 'qa' ? 'qa' : 'execute';
   const toolset = browserToolset({ role, mode: rt.config.browserMode, prefix: rt.config.browserToolPrefix });
-  const shopGuard = createBrowserGuard(shop, toolset);
-  return role === 'qa' ? readOnlyBasketGuard(toolset, shop, shopGuard) : shopGuard;
+  if (role === 'qa') return readOnlyBasketGuard(toolset, shop, createBrowserGuard(shop, toolset));
+  return createBrowserGuard(shop, toolset, rt.config.checkout ? { checkout: rt.config.checkout } : {});
 }
 
 /** Tool call id, or the run's sequential slot when OpenClaw does not give one (calls of one run are sequential). */

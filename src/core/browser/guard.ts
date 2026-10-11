@@ -4,6 +4,7 @@
  * (which it injects, so agents can call `window.__poo.*` directly), and the agent's own tab.
  * One guard per agent run: it remembers whether the run has opened its own tab yet, and whether it closed it.
  */
+import type { CheckoutDetails } from '../contracts.js';
 import type { ShopAdapter } from '../shops/types.js';
 import type { BrowserToolset } from './toolset.js';
 
@@ -52,11 +53,22 @@ export function describeHelperCalls(methods: readonly string[]): string {
   return `one call per script, e.g. window.__poo.status() or window.__poo.setQty("<exact name>", 2); methods: ${methods.join(', ')}; arguments must be JSON literals (double-quoted strings, whole numbers)`;
 }
 
-export function createBrowserGuard(shop: ShopAdapter, toolset: BrowserToolset): ToolGuard {
+export interface BrowserGuardOptions {
+  /**
+   * The run fills the order form with these details: `fillOrderForm()` gets them as its arguments here, so the model
+   * never types them. The run then keeps its tab, because the filled form exists only there.
+   */
+  checkout?: CheckoutDetails;
+}
+
+const FILL_ORDER_FORM = 'fillOrderForm';
+
+export function createBrowserGuard(shop: ShopAdapter, toolset: BrowserToolset, opts: BrowserGuardOptions = {}): ToolGuard {
   const prefix = toolset.prefix;
   const allowed = new Set(toolset.allowedTools);
   const tabsTool = toolset.tool('browser_tabs');
   const helperMethods = [...shop.helperApi.read, ...shop.helperApi.write];
+  const checkout = opts.checkout;
   // Attached over CDP, Playwright MCP starts with one of the USER's tabs as its current tab, so nothing may run
   // before this run has opened its own (see BrowserToolset.startsInOwnTab).
   let ownTabOpened = toolset.startsInOwnTab;
@@ -64,7 +76,7 @@ export function createBrowserGuard(shop: ShopAdapter, toolset: BrowserToolset): 
   // browser tool is denied: the next call would reconnect and leave a new tab behind.
   const closesOwnTab = (input: Record<string, unknown>) => toolset.seesOnlyOwnTabs && input.action === 'close' && input.index === undefined;
   let ownTabClosed = false;
-  const tabActions = `${tabsTool} {"action":"new","url":"${shop.baseUrl}"}${toolset.seesOnlyOwnTabs ? ' and {"action":"close"} (your own tab, as your last browser call)' : ''}`;
+  const tabActions = `${tabsTool} {"action":"new","url":"${shop.baseUrl}"}${toolset.seesOnlyOwnTabs && !checkout ? ' and {"action":"close"} (your own tab, as your last browser call)' : ''}`;
 
   return (toolName, input): GuardDecision | undefined => {
     if (!toolName.startsWith(prefix)) return undefined;
@@ -87,6 +99,7 @@ export function createBrowserGuard(shop: ShopAdapter, toolset: BrowserToolset): 
 
     if (toolName === tabsTool) {
       if (closesOwnTab(input)) {
+        if (checkout) return { deny: 'Keep your tab open: the filled order form exists only in it, and the user sends the order from it.' };
         ownTabClosed = true;
         return undefined;
       }
@@ -106,6 +119,12 @@ export function createBrowserGuard(shop: ShopAdapter, toolset: BrowserToolset): 
     const call = typeof code === 'string' ? parseHelperCall(code) : undefined;
     if (!call || !helperMethods.includes(call.method)) {
       return { deny: `Page scripts may only call the shop helper: ${describeHelperCalls(helperMethods)}.` };
+    }
+    if (call.method === FILL_ORDER_FORM) {
+      if (!checkout) return { deny: 'Filling the order form is not set up: leave the form to the user.' };
+      if (call.args.length) return { deny: "Call window.__poo.fillOrderForm() without arguments: the system puts in the user's details." };
+      const args = [checkout.name, checkout.phone, checkout.delivery, checkout.address].map((a) => JSON.stringify(a)).join(', ');
+      return { updatedInput: { ...input, [codeField]: withHelper(shop, `() => window.__poo.${FILL_ORDER_FORM}(${args})`) } };
     }
     return { updatedInput: { ...input, [codeField]: withHelper(shop, code as string) } };
   };

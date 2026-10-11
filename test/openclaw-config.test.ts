@@ -86,6 +86,13 @@ describe('OpenClaw config', () => {
     expect(extension.agents.defaults.skipBootstrap).toBe(true);
   });
 
+  it('passes the order form details to the plugin only when they are set', () => {
+    const checkout = { name: 'Тарас Тестовий', phone: '+380671234567', delivery: 'Доставка Новою поштою', address: 'вул. Тестова 1, Київ' };
+    const withForm = buildOpenClawConfig({ ...options({ mode: 'extension', profileDir: 'Default' }), checkout }) as any;
+    expect(parsePluginConfig(withForm.plugins.entries['product-order-orchestrator'].config).checkout).toEqual(checkout);
+    expect(extension.plugins.entries['product-order-orchestrator'].config).not.toHaveProperty('checkout');
+  });
+
   it("local: the project's gateway on loopback with token auth from the environment, no update checks or LAN discovery", () => {
     const local = buildLocalConfig(options({ mode: 'extension', profileDir: 'Default' }), 18789) as any;
     expect(local.gateway).toEqual({ mode: 'local', port: 18789, bind: 'loopback', auth: { mode: 'token', token: '${OPENCLAW_GATEWAY_TOKEN}' } });

@@ -196,6 +196,48 @@ describe('createBrowserGuard: order form patterns', () => {
   });
 });
 
+describe('createBrowserGuard: the order form', () => {
+  const checkout = { name: 'Тарас Тестовий', phone: '+380671234567', delivery: 'Доставка Новою поштою', address: 'вул. Тестова 1, Київ' };
+  /** Echoes the arguments fillOrderForm gets in the page. */
+  const formShop: ShopAdapter = {
+    ...karashynyard,
+    helperSource: 'window.__poo = { fillOrderForm: (...args) => args, readOrderForm: () => ({ found: true }) };',
+    helperApi: { read: ['readOrderForm'], write: ['fillOrderForm'] },
+  };
+  const fillGuard = (shop: ShopAdapter = formShop, opts = { checkout }) => {
+    const guard = createBrowserGuard(shop, pw, opts);
+    guard(pw.tool('browser_tabs'), { action: 'new', url: shop.baseUrl });
+    return guard;
+  };
+
+  it("passes the configured details to fillOrderForm: the model never types them", async () => {
+    const updated = fillGuard()(pw.evalTool.name, { function: '() => window.__poo.fillOrderForm()' })?.updatedInput as { function: string };
+    expect(updated.function).toContain(`window.__poo.fillOrderForm("Тарас Тестовий", "+380671234567", "Доставка Новою поштою", "вул. Тестова 1, Київ")`);
+    const args = await Promise.resolve(vm.runInContext(`(${updated.function})`, page())(undefined));
+    expect(args).toEqual([checkout.name, checkout.phone, checkout.delivery, checkout.address]);
+  });
+
+  it('denies arguments from the model, and filling when no details are configured', () => {
+    expect(fillGuard()(pw.evalTool.name, { function: 'window.__poo.fillOrderForm("Хтось", "+380000000000", "x", "y")' })?.deny).toMatch(/without arguments/);
+    expect(fillGuard(formShop, {} as { checkout: typeof checkout })(pw.evalTool.name, { function: 'window.__poo.fillOrderForm()' })?.deny).toMatch(/not set up/);
+    expect(pwGuard(pw.evalTool.name, { function: 'window.__poo.fillOrderForm()' })?.deny).toMatch(/not set up/);
+  });
+
+  it('still blocks direct access to the form and its submit button', () => {
+    const guard = fillGuard(karashynyard);
+    expect(guard(pw.evalTool.name, { function: '() => window.__poo.readOrderForm()' })?.updatedInput).toBeDefined();
+    expect(guard(pw.tool('browser_click'), { target: '.t706__orderform .t-submit', element: 'order button' })?.deny).toMatch(/safety rules/);
+    expect(guard(pw.evalTool.name, { function: '() => document.forms[0].requestSubmit()' })?.deny).toMatch(/safety rules/);
+  });
+
+  it('through the extension, keeps the tab that holds the filled form', () => {
+    const viaExtension = browserToolset({ role: 'execute', mode: 'extension' });
+    const guard = createBrowserGuard(karashynyard, viaExtension, { checkout });
+    expect(guard(viaExtension.tool('browser_tabs'), { action: 'close' })?.deny).toMatch(/Keep your tab open/);
+    expect(guard(viaExtension.tool('browser_navigate'), { url: karashynyard.baseUrl })).toBeUndefined();
+  });
+});
+
 describe('createBrowserGuard: helper injection', () => {
   it('rewrites only `function`, keeps other fields, and the result behaves like the original', async () => {
     const guard = openedGuard(fakeShop);

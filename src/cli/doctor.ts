@@ -10,7 +10,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { PLAYWRIGHT_EXTENSION_URL } from '../browser/chrome.js';
 import { browserConnection, checkBrowser } from '../browser/connection.js';
-import { env, ROOT_DIR } from '../config/env.js';
+import { checkoutDetails, env, ROOT_DIR } from '../config/env.js';
 import { errorMessage } from '../core/errors.js';
 import { skillFile } from '../core/explore/product-list.js';
 import { GATEWAY_PORT, localOpenClaw } from '../openclaw/local.js';
@@ -124,6 +124,14 @@ function checkExtensionToken(): Result {
   );
 }
 
+function checkOrderFormDetails(): Result {
+  try {
+    return checkoutDetails() ? pass('set: Execute fills the order form (it never sends it)') : skip('not set: you fill the order form yourself');
+  } catch (err) {
+    return fail(errorMessage(err), 'Fix the CHECKOUT_* values in .env (see .env.example), then restart.');
+  }
+}
+
 // ---------- OpenClaw (the project's own, see src/openclaw/local.ts) ----------
 
 function checkOpenclawPackage(): Result {
@@ -198,6 +206,7 @@ function checks(): Check[] {
     { name: `Browser (${e.BROWSER_MODE})`, required: true, run: checkBrowserReady },
     { name: 'Chrome is the default browser', required: false, run: checkDefaultBrowser },
     { name: 'PLAYWRIGHT_MCP_EXTENSION_TOKEN', required: true, run: checkExtensionToken },
+    { name: 'Order form details (CHECKOUT_*)', required: true, run: checkOrderFormDetails },
     {
       name: 'Explore skill',
       required: true,

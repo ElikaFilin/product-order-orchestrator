@@ -32,7 +32,7 @@ flowchart LR
 |---|---|---|---|---|
 | cos | `agents/cos/` | `anthropic/claude-opus-5-5` | `message` (your chat only), `sessions_spawn`, `sessions_yield`, `sessions_send`, `subagents`, `poo_task`, `poo_task_status`, `poo_answer`, `poo_order_state`, `poo_accept_items`, `poo_new_order`, `poo_cancel` | browser, product list, files, shell, web |
 | explore | `agents/explore/` | `anthropic/claude-sonnet-5-5` | `read` (its skill file only), `poo_ask_user`, `poo_update_product_list`, `poo_submit_selection` | messaging, browser |
-| execute | `agents/execute/` | `anthropic/claude-sonnet-5-5` | `playwright__browser_{tabs,navigate,snapshot,wait_for,evaluate,take_screenshot,console_messages}`, `poo_ask_user`, `poo_submit_execute` | messaging, clicking, typing |
+| execute | `agents/execute/` | `anthropic/claude-sonnet-5-5` | `playwright__browser_{tabs,navigate,snapshot,wait_for,evaluate,take_screenshot,console_messages}`, `poo_ask_user`, `poo_submit_execute` | messaging, clicking, typing, sending the order |
 | qa | `agents/qa/` | `anthropic/claude-sonnet-5-5` | the Execute browser tools plus `playwright__browser_click` (basket icon only), `poo_ask_user`, `poo_submit_qa` | messaging, changing the basket |
 
 How it is enforced (`src/openclaw/config.ts` generates the config, `src/plugin/` enforces):
@@ -106,10 +106,11 @@ sequenceDiagram
   C->>U: confirms the selection
   C->>P: poo_task execute (whole expected basket)
   X->>X: own tab, setQty per line (helper), readCart
-  X->>P: poo_submit_execute → results from the page
+  X->>X: fillOrderForm() (plugin writes the details), readOrderForm; tab stays open
+  X->>P: poo_submit_execute → results and order form check from the page
   C->>P: poo_task qa (expected basket + re-checks)
   Q->>Q: own tab, basket icon, readModal, readCart
-  Q->>P: poo_submit_qa → verdict computed in code
+  Q->>P: poo_submit_qa → verdict computed in code (basket + Execute's form check)
   alt match, read in the basket window
     C->>U: summary + {{cart_link}} (filled in now)
   else mismatch
@@ -134,6 +135,15 @@ merges by adding quantities. So Execute and QA drive *your* Chrome profile, and 
 (`setQty`) instead of clicking "add". `src/core/shops/karashynyard/` holds the adapter: allowed origins, checkout
 endpoints to block (Playwright `--blocked-origins`), forbidden patterns, the in-page helper `window.__poo` (injected
 into every page script) and the Execute/QA playbooks. Another shop is another `ShopAdapter`.
+
+**The order form** (optional, `CHECKOUT_*` in `.env` → the plugin's `checkout` config). It keeps its values only in
+the tab where it was filled, and every Execute/QA run has its own tab that other runs cannot see. So Execute fills it
+last, with `window.__poo.fillOrderForm()` (no arguments: the guard rewrites the call with the configured name, phone,
+delivery option and address), reads it back with `readOrderForm()` and keeps its tab open for the user (the guard
+refuses closing it). `PageOps` captures what the page returned and `checkOrderForm` compares it with the configured
+details (`orderForm` in the result: `ok`, `mismatch`, or `unverified` when no read-back followed the last basket
+change). The QA request carries that check, QA's verdict is a mismatch unless it is `ok`, and `isVerified()` requires
+it, so the basket link waits for a correct form. Submitting stays blocked as before.
 
 Playwright MCP (`--extension --profile-dir-name <profile>`) opens the Playwright Extension's connect page in your
 profile; with `PLAYWRIGHT_MCP_EXTENSION_TOKEN` the connection is approved automatically. Each run gets its own tab group

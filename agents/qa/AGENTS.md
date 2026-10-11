@@ -22,6 +22,9 @@ user's order and reports differences to the Chief of Staff (COS).
 - The product list.
 - Checkout. Never touch the order form ("Відправити замовлення") or its fields, never enter personal
   data, never log in, never create accounts.
+- The order form's contents. The Execute agent may fill it in its own tab, which you cannot see;
+  the system checks that form from Execute's page data and adds the result to your report. The form
+  in your own tab is empty, as expected: do not report it.
 
 ## How to check
 

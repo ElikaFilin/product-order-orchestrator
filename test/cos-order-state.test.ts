@@ -283,6 +283,26 @@ describe('OrderState', () => {
     ]);
   });
 
+  it("hands QA the order form check of the last basket change, and is verified only when the form is right", () => {
+    const state = new OrderState(SHOP);
+    state.applySelection(selection);
+    const lines = [{ name: FILLET, qty: 2 }, { name: THIGH, qty: 1 }, { name: LIVER, qty: 1 }];
+    const ops = state.executeInitialRequest().ops.map((op) => ({ ...op, status: 'ok' as const, actualQty: op.targetQty }));
+    const wrongForm = { status: 'mismatch' as const, fields: [{ field: 'phone' as const, expected: '+380671234567', actual: '', ok: false }] };
+    state.applyExecuteResult({ ...executeResult(ops), orderForm: wrongForm }, 'initial');
+    expect(state.qaRequest().orderForm).toEqual(wrongForm);
+    expect(state.summary()).toContain('Order form differs: phone');
+
+    state.applyQaResult(qaResult({ verdict: 'mismatch', cart: lines, differences: [], orderForm: wrongForm }));
+    expect(state.openDifferences()).toEqual([]);
+    expect(state.isVerified()).toBe(false);
+
+    const rightForm = { status: 'ok' as const, fields: [{ field: 'phone' as const, expected: '+380671234567', actual: '+380 (67) 123-45-67', ok: true }] };
+    state.applyExecuteResult({ ...executeResult(ops), orderForm: rightForm }, 'initial');
+    state.applyQaResult(qaResult({ verdict: 'match', cart: lines, differences: [], orderForm: state.qaRequest().orderForm }));
+    expect(state.isVerified()).toBe(true);
+  });
+
   it('survives a snapshot round trip, including a pending re-check', () => {
     const state = new OrderState(SHOP);
     state.applySelection(selection);

@@ -3,6 +3,7 @@
  * shapes the agent has.
  */
 import type { BrowserToolset } from '../../browser/toolset.js';
+import type { ExecutePlaybookOptions } from '../types.js';
 
 export interface ShopUrls {
   baseUrl: string;
@@ -59,20 +60,42 @@ function lastStep(a: Actions, keepOpen: string): string {
   return `Close your tab as your last browser call, also after a failure: ${a.closeOwnTab}. Every browser tool is blocked after it; then give your result.`;
 }
 
+const NO_TITLE_CLICKS = 'Never click product titles or images: on this site they also add to the basket.';
+
 const SAFETY = `Never touch the order form inside the cart window (name, phone, delivery, address, "Подарувати тушонку ЗСУ",
 "Відправити замовлення") and never type personal data: you only prepare the basket, the user orders. Tool calls that
-mention the order form or submitting are blocked. Never click product titles or images: on this site they also add to
-the basket.`;
+mention the order form or submitting are blocked. ${NO_TITLE_CLICKS}`;
 
-export function renderExecutePlaybook(tools: BrowserToolset, urls: ShopUrls): string {
+const FILL_SAFETY = `The order form inside the cart window is filled only by \`window.__poo.fillOrderForm()\`: the system puts
+in the user's name, phone, delivery option and address. Never click, type into or submit the form yourself, never
+press "Відправити замовлення", never touch "Подарувати тушонку ЗСУ" and never type personal data: the user checks the
+form and sends the order. Other tool calls that mention the order form or submitting are blocked. ${NO_TITLE_CLICKS}`;
+
+export function renderExecutePlaybook(tools: BrowserToolset, urls: ShopUrls, opts: ExecutePlaybookOptions = {}): string {
   const a = actions(tools);
+  const fill = opts.fillOrderForm === true;
   const setQtyExample = a.evalCall(`window.__poo.setQty(${JSON.stringify(EXAMPLE_NAME)}, 2)`);
+  const formHelpers = fill
+    ? `
+- \`window.__poo.fillOrderForm()\` → \`{found, name, phone, delivery, address, detail?}\`: opens the cart window and fills
+  the order form with the user's details. Always call it without arguments; the system writes them. \`detail\` says
+  what went wrong.
+- \`window.__poo.readOrderForm()\` → the same fields, as the form holds them now`
+    : '';
+  const lastSteps = fill
+    ? `6. If the basket from step 5 has at least one line, fill the order form: ${a.evalCall('window.__poo.fillOrderForm()')},
+   then read it back: ${a.evalCall('window.__poo.readOrderForm()')}. If \`detail\` reports a problem, call
+   fillOrderForm once more. Fill the form after the last basket change: if you change the basket after it, fill and
+   read the form again. The system checks the fields; report nothing about them yourself.
+7. Keep your tab open with the cart window: the filled form exists only in this tab, and the user sends the order
+   from it. Never close tabs.`
+    : `6. ${lastStep(a, 'Leave your tab open.')}`;
   return `## Shop playbook: karashynyard.com.ua (Tilda)
 
 The basket is the shop's Tilda cart. It exists only in this browser profile (localStorage), so every change is the
 user's real basket. Tilda ADDS quantities when a product is added again, so never press "До кошика" yourself: change
 quantities only with \`window.__poo.setQty\`, which makes the basket contain exactly the requested quantity.
-${SAFETY}
+${fill ? FILL_SAFETY : SAFETY}
 
 ### In-page helper
 Every \`${tools.evalTool.name}\` call already has \`window.__poo\` loaded (it is injected for you; never paste or
@@ -82,7 +105,7 @@ redefine it). One method per call:
 - \`window.__poo.setQty(name, qty)\` → \`{status: "ok"|"not_found"|"failed", name, before, after, detail?}\`. \`qty\` is the
   absolute target (0 removes the line). It waits for Tilda itself: ~1 s per add, ~5 s per removal, longer
   while the tab is in the background. Wait for the result; never call it again while it runs.
-- \`window.__poo.readCart()\` → \`{lines: [{name, qty, unitPrice, amount, sku}], units, total}\` (what the basket holds)
+- \`window.__poo.readCart()\` → \`{lines: [{name, qty, unitPrice, amount, sku}], units, total}\` (what the basket holds)${formHelpers}
 
 A page script is exactly one helper call and nothing else. Write product names as JSON strings inside the code,
 exactly as given in the task, e.g. ${setQtyExample}
@@ -91,7 +114,7 @@ exactly as given in the task, e.g. ${setQtyExample}
 1. ${a.openOwnTab(urls.baseUrl)}
 2. Wait until the page is ready: ${a.evalCall('window.__poo.status()')} (it waits by itself). If \`ready\` is false,
    ${a.pause} and call it once more; if it is still false, report every operation as \`failed\` with detail
-   "the shop page did not load" (after step 6).
+   "the shop page did not load" (after the last step).
 3. Read the basket before changing it: ${a.evalCall('window.__poo.readCart()')}
 4. For each operation make exactly one setQty call with the exact name and the targetQty.
    - \`ok\`: done, actualQty = \`after\`.
@@ -99,7 +122,7 @@ exactly as given in the task, e.g. ${setQtyExample}
    - \`failed\`: repeat the same call once; if it fails again report \`failed\` with \`after\` and \`detail\`.
 5. Verify with ${a.evalCall('window.__poo.readCart()')}: every requested name must have exactly its targetQty
    (0 = no line). Fix a mismatch with one more setQty call. Use this final read for the basket in your result.
-6. ${lastStep(a, 'Leave your tab open.')}
+${lastSteps}
 `;
 }
 

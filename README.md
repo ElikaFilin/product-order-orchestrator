@@ -1,7 +1,8 @@
 # Product Order Orchestrator
 
 You tell a Telegram bot what you want to buy. A small team of AI agents fills the shop basket **in your own Chrome
-profile** and sends you the basket link. Checkout and payment stay with you: the agents never place an order.
+profile**, fills in the order form with your details (optional) and sends you the basket link. Sending the order and
+payment stay with you: the agents never place an order.
 
 The agents run inside one [OpenClaw](https://github.com/openclaw/openclaw) gateway (2026.9.9, pinned in this repo), so
 its Control UI shows every agent's sessions, tool calls, sub-agent runs, statuses and errors:
@@ -9,7 +10,8 @@ its Control UI shows every agent's sessions, tool calls, sub-agent runs, statuse
 - **COS (Chief of Staff)** is the only agent that talks to you, in your Telegram chat. It plans the work and starts
   the other agents as OpenClaw sub-agents.
 - **Explore** owns your product list (an OpenClaw skill) and asks you which products to buy and how many.
-- **Execute** fills the basket in your browser through Playwright MCP and the Playwright Extension.
+- **Execute** fills the basket in your browser through Playwright MCP and the Playwright Extension, then the order
+  form (name, phone, delivery, address) when your details are in `.env`.
 - **QA** opens the basket the way you do, reads it and reports any differences.
 
 Every rule is enforced in code by this repo's OpenClaw plugin (`src/plugin/`): which tools each agent may call, the
@@ -86,9 +88,15 @@ Fill in:
 | `TELEGRAM_ALLOWED_USER_ID` | your numeric Telegram id (COS answers only you) |
 | `PLAYWRIGHT_MCP_EXTENSION_TOKEN` | the extension's token |
 | `CHROME_PROFILE_DIR` | only if the profile folder is not `Default` |
+| `CHECKOUT_NAME`, `CHECKOUT_PHONE`, `CHECKOUT_DELIVERY`, `CHECKOUT_ADDRESS` | optional: your details for the order form (all four, or none), see below |
 
 `.env` is ignored by git. It is the only place for secrets: every `pnpm` script loads it, and the gateway gets the
 values from there.
+
+**Order form (optional).** With all four `CHECKOUT_*` values set, Execute fills the shop's order form after the basket:
+your name, phone (international format, e.g. `+380671234567`; the shop's form shows +380 by default), the delivery
+option exactly as the shop shows it (`Доставка Новою поштою`) and the address or Nova Poshta branch. It never sends
+the order. Leave them empty to fill the form yourself.
 
 ### 6. Start
 
@@ -150,6 +158,11 @@ Bot:  (what is in the basket) and the link
   again, knowing exactly what changed), or say which lines to keep as they are.
 - **Final link:** open it in Chrome, in the profile the bot names: the basket lives only there. The link comes only
   after QA has read the basket window the way you see it. Check it, then fill in delivery and pay yourself.
+- **Filled order form:** with the `CHECKOUT_*` settings, the form is filled in the shop tab Execute leaves open (the
+  newest "Playwright" tab group). The shop keeps form values only in that tab, so the link opens the basket with an
+  empty form. The plugin reads the fields back from Execute's tab and checks them in code; QA's report carries that
+  check, and the link goes out only when the form holds your details. Check the form there and press
+  "Відправити замовлення" yourself.
 - **Product list:** `save info - add "Печінка індички, 500 г" to product list selection` adds a product,
   `save info - remove "<product>" from product list` removes one. The next order question includes the change.
 - **Commands (OpenClaw):** `/new` starts a new order (the plugin clears the order), `/stop` stops the running
@@ -192,12 +205,13 @@ The Control UI (`pnpm dashboard`) is the dashboard:
 
 ## Safety
 
-- **Never checks out.** The order form and its "Відправити замовлення" button are never touched. No agent has a tool
-  that types, presses keys or fills forms; a page script may only be one call of the shop's helper (no free
-  JavaScript), and only Execute's helper calls change the basket; QA can click nothing but the basket icon. The
-  plugin also refuses any tool call that mentions the order form, a submit action or the order endpoints, Playwright
-  blocks those endpoints, and navigation is limited to the shop. The agents never ask for delivery, contact or
-  payment details.
+- **Never checks out.** No agent ever presses "Відправити замовлення". No agent has a tool that types, presses keys
+  or fills forms; a page script may only be one call of the shop's helper (no free JavaScript), and only Execute's
+  helper calls change the basket or fill the order form; QA can click nothing but the basket icon. The order form is
+  filled only by `fillOrderForm()`, whose values the plugin writes from `.env` (the model passes none), and only when
+  the `CHECKOUT_*` settings exist. The plugin also refuses any other tool call that mentions the order form, a submit
+  action or the order endpoints, Playwright blocks those endpoints, and navigation is limited to the shop. The agents
+  never ask for delivery, contact or payment details.
 - **Your other tabs.** Execute and QA work only in a tab opened for their run (through the extension they see only
   their own tab group), tabs are never listed, selected or closed, and every page script first checks that it runs on
   the shop. Titles and URLs of your other tabs are hidden from the models and the transcripts.
@@ -206,7 +220,8 @@ The Control UI (`pnpm dashboard`) is the dashboard:
 - **Locked-down agents.** Each agent has an explicit tool allow-list (no shell, files, web or built-in browser), and
   the plugin refuses anything else in code. Explore may read only its skill file.
 - **Secrets** live only in `.env`, which git ignores; the generated config holds `${VAR}` references, and the
-  extension token goes only to the Playwright MCP server.
+  extension token goes only to the Playwright MCP server. Your order form details are in `.env` too; the generated
+  config (`.runtime/`, also ignored) holds them as values.
 - **Local only.** The gateway binds to 127.0.0.1 with a token (`.runtime/openclaw/gateway-token`, created on first
   start); `pnpm dashboard` signs the browser in.
 

@@ -66,6 +66,31 @@ export const ProductListUpdate = z.object({
 });
 export type ProductListUpdate = z.infer<typeof ProductListUpdate>;
 
+// ---------- Order form ----------
+
+/** The user's details for the shop's order form (.env). Agents never type them: code puts them into the page. */
+export const CheckoutDetails = z.object({
+  name: z.string().min(1),
+  /** International format, digits only after the "+": +380671234567. */
+  phone: z.string().regex(/^\+\d{8,15}$/, 'phone must be in international format, e.g. +380671234567'),
+  /** The delivery option exactly as the shop shows it. */
+  delivery: z.string().min(1),
+  /** Delivery address or post office. */
+  address: z.string().min(1),
+});
+export type CheckoutDetails = z.infer<typeof CheckoutDetails>;
+
+export const ORDER_FORM_FIELDS = ['name', 'phone', 'delivery', 'address'] as const;
+
+/** The order form in Execute's tab, read back from the page and compared with CheckoutDetails in code. */
+export const OrderFormCheck = z.object({
+  /** unverified: no read-back of the form after the last basket change (or none at all). */
+  status: z.enum(['ok', 'mismatch', 'unverified']),
+  fields: z.array(z.object({ field: z.enum(ORDER_FORM_FIELDS), expected: z.string(), actual: z.string(), ok: z.boolean() })),
+  detail: z.string().optional(),
+});
+export type OrderFormCheck = z.infer<typeof OrderFormCheck>;
+
 // ---------- Execute ----------
 
 /** "Make the basket contain exactly targetQty of this product" (0 = remove it). Idempotent by design. */
@@ -98,6 +123,8 @@ export const ExecuteResult = z.object({
     }),
   ),
   cart: z.array(CartLine).default([]),
+  /** Present when the user's checkout details are configured: Execute filled the order form in its tab. */
+  orderForm: OrderFormCheck.optional(),
   notes: z.string().optional(),
 });
 export type ExecuteResult = z.infer<typeof ExecuteResult>;
@@ -116,6 +143,11 @@ export const QaRequest = z.object({
   shopId: ShopId,
   expected: z.array(BasketItem),
   focus: z.array(QaFocus).default([]),
+  /**
+   * The order form check of the last Execute run. The form lives only in Execute's tab, which QA's own tab cannot
+   * see, so code checked it from the page and QA's result carries it.
+   */
+  orderForm: OrderFormCheck.optional(),
 });
 export type QaRequest = z.infer<typeof QaRequest>;
 
@@ -137,6 +169,8 @@ export const QaResult = z.object({
   total: z.number().nonnegative().optional(),
   differences: z.array(Difference),
   focus: z.array(QaFocus.extend({ passed: z.boolean(), actualQty: Qty })).default([]),
+  /** The order form in Execute's tab (from the request); anything but "ok" makes the verdict a mismatch. */
+  orderForm: OrderFormCheck.optional(),
   cartUrl: z.string(),
   notes: z.string().optional(),
 });

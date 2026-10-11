@@ -2,7 +2,7 @@ import { AgentTaskError } from '../errors.js';
 import { karashynyard } from './karashynyard/index.js';
 import type { ShopAdapter } from './types.js';
 
-export type { ShopAdapter } from './types.js';
+export type { ExecutePlaybookOptions, ShopAdapter } from './types.js';
 
 /** Registered shops. Add a new shop by implementing ShopAdapter in src/core/shops/<id>/ and listing it here. */
 const SHOPS: ReadonlyMap<string, ShopAdapter> = new Map([[karashynyard.id, karashynyard]]);

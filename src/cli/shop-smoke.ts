@@ -4,8 +4,9 @@
  * Starts a THROWAWAY headless Chrome (fresh temp profile, never the user's browser), spawns two Playwright MCP
  * servers with the flags the agents get, and sends every tool input through createBrowserGuard(), so the helper
  * injection is exercised end to end. One session plays Execute (setQty add / increase / decrease / remove), the
- * other plays QA in its own tab (cart icon -> cart window -> readModal + readCart), then empties the basket. The
- * basket only exists in the throwaway profile and the order form is never touched. Exits 1 on any mismatch, so
+ * other plays QA in its own tab (cart icon -> cart window -> readModal + readCart), then empties the basket. Execute
+ * also fills the order form with dummy details through the guard and reads it back; nothing is ever sent (and the
+ * order endpoints are blocked). The basket only exists in the throwaway profile. Exits 1 on any mismatch, so
  * maintainers can run it to detect site drift. Optional env: CHROME_PATH (Chrome binary), SMOKE_PROFILE_PARENT
  * (temp profile parent).
  */
@@ -20,9 +21,12 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { checkCdp } from '../browser/cdp.js';
 import { playwrightMcpArgs, playwrightMcpCli } from '../browser/playwright-mcp.js';
 import { env, runtimeDir } from '../config/env.js';
-import { createBrowserGuard, type GuardDecision, type ToolGuard } from '../core/browser/guard.js';
+import { createBrowserGuard, type BrowserGuardOptions, type GuardDecision, type ToolGuard } from '../core/browser/guard.js';
 import { browserToolset, toolResultValue, type BrowserToolset } from '../core/browser/toolset.js';
+import type { CheckoutDetails } from '../core/contracts.js';
 import { errorMessage } from '../core/errors.js';
+import { checkOrderForm, describeOrderForm } from '../core/order-form.js';
+import type { OrderFormRead } from '../core/shops/helper-api.js';
 import { getShop, type ShopAdapter } from '../core/shops/index.js';
 
 const CHROME = process.env.CHROME_PATH ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
@@ -32,6 +36,11 @@ const PROFILE_PARENT = process.env.SMOKE_PROFILE_PARENT ?? tmpdir();
 /** Products the smoke test drives, per shop: exact site names [A, B, C]. */
 const PROBES: Record<string, [string, string, string]> = {
   karashynyard: ['Філе зі стегна індички, 1 кг', 'Печінка курочки, 500 г', 'Горіхова паста з фунндуком 350 г'],
+};
+
+/** Dummy order form details per shop (filled and read back, never sent). */
+const FORM_PROBES: Record<string, CheckoutDetails> = {
+  karashynyard: { name: 'Smoke Test', phone: '+380501234567', delivery: 'Доставка Новою поштою', address: 'Smoke test, not an order' },
 };
 
 // Shapes of the in-page helper (window.__poo) results.
@@ -71,14 +80,14 @@ class BrowserSession {
     private readonly stderr: string[],
   ) {}
 
-  static async start(label: string, args: string[], toolset: BrowserToolset, shop: ShopAdapter): Promise<BrowserSession> {
+  static async start(label: string, args: string[], toolset: BrowserToolset, shop: ShopAdapter, opts: BrowserGuardOptions = {}): Promise<BrowserSession> {
     // No env: the SDK passes only a safe default environment (HOME, PATH, ...), never the .env secrets.
     const transport = new StdioClientTransport({ command: process.execPath, args: [playwrightMcpCli(), ...args], stderr: 'pipe' });
     const stderr: string[] = [];
     transport.stderr?.on('data', (chunk: Buffer) => stderr.push(chunk.toString()));
     const client = new Client({ name: `poo-shop-smoke-${label}`, version: '0.1.0' });
     await client.connect(transport);
-    return new BrowserSession(label, toolset, client, createBrowserGuard(shop, toolset), stderr);
+    return new BrowserSession(label, toolset, client, createBrowserGuard(shop, toolset, opts), stderr);
   }
 
   /** The guard's decision for a call (no tool is called). */
@@ -220,6 +229,20 @@ function checkGuard(report: Report, exe: BrowserSession, shop: ShopAdapter): voi
   report.check('denies browser_run_code_unsafe', denied(exe.decide('browser_run_code_unsafe', { code: 'async (page) => page.title()' })));
   report.check('denies navigation from page scripts', denied(exe.decide('browser_evaluate', { function: '() => { location.href = "https://example.com/" }' })));
   report.check('lets helper calls through', !denied(exe.decide('browser_evaluate', { function: '() => window.__poo.setQty("X", 2)' })));
+  report.check(
+    'denies order form details typed by the model',
+    denied(exe.decide('browser_evaluate', { function: '() => window.__poo.fillOrderForm("Someone", "+380000000000", "x", "y")' })),
+  );
+}
+
+/** Execute fills the order form through the guard (which writes the details) and reads it back in its tab. */
+async function orderFormFlow(report: Report, exe: BrowserSession, form: CheckoutDetails): Promise<void> {
+  report.section('order form (execute tab)');
+  const filled = await exe.eval<OrderFormRead>('window.__poo.fillOrderForm()');
+  report.check('fillOrderForm reports no problem', filled.found && !filled.detail, filled.detail ?? 'ok');
+  const check = checkOrderForm(form, await exe.eval<OrderFormRead>('window.__poo.readOrderForm()'));
+  report.check('readOrderForm holds every detail', check.status === 'ok', describeOrderForm(check));
+  report.check('the cart window stays open with the form', (await exe.eval<ModalView>('window.__poo.readModal()')).open);
 }
 
 /** Execute role (Playwright MCP): returns the basket it leaves behind. */
@@ -327,6 +350,10 @@ async function qaFlow(report: Report, qa: BrowserSession, shop: ShopAdapter, exp
   const cart = await qa.eval<CartView>('window.__poo.readCart()');
   const cartProblems = sameLines(cart.lines, expected);
   report.check('readCart (QA tab) matches the cart window', !cartProblems && cart.total === modal.total, cartProblems || `${cart.total} UAH`);
+
+  // The shop keeps form values only in the tab that filled them: why code checks the form in Execute's tab.
+  const form = await qa.eval<OrderFormRead>('window.__poo.readOrderForm()');
+  report.check("the QA tab's order form is empty (the form lives in the Execute tab)", form.found && !form.name && !form.phone && !form.address);
 }
 
 /** Empty the basket through `session` and confirm every tab of the profile sees it empty. */
@@ -351,6 +378,7 @@ async function main(): Promise<void> {
   const shop = getShop(process.argv[2] ?? env().DEFAULT_SHOP);
   const probes = PROBES[shop.id];
   if (!probes) throw new Error(`No smoke-test products configured for shop "${shop.id}" (see PROBES in ${import.meta.filename}).`);
+  const form = FORM_PROBES[shop.id];
 
   const report = new Report();
   const runDir = runtimeDir('runs', `smoke-${shop.id}-${Date.now()}`);
@@ -369,11 +397,13 @@ async function main(): Promise<void> {
       }),
       browserToolset({ role: 'qa', mode: 'cdp' }),
       shop,
+      label === 'execute' && form ? { checkout: form } : {},
     );
   try {
     const exe = await start('execute');
     sessions.push(exe);
     const expected = await executeFlow(report, exe, shop, probes);
+    if (form) await orderFormFlow(report, exe, form);
     checkGuard(report, exe, shop);
     const qa = await start('qa');
     sessions.push(qa);

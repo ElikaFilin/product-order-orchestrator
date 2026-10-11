@@ -17,6 +17,7 @@ import {
   type QaResult,
   type Selection,
 } from './contracts.js';
+import { describeOrderForm } from './order-form.js';
 
 export interface ItemQty {
   name: string;
@@ -161,14 +162,18 @@ export class OrderState {
     return (this.lastQa?.differences ?? []).filter((d) => this.expectedQty(d.name) !== d.actualQty);
   }
 
-  /** The last QA check is current, read the basket window the way the user sees it, and nothing differs. */
+  /**
+   * The last QA check is current, read the basket window the way the user sees it, nothing differs, and the order
+   * form (when Execute filled one) holds the user's details.
+   */
   isVerified(): boolean {
     return (
       this.lastQa !== undefined &&
       this.lastQa.modalOpened &&
       !this.needsCheck &&
       this.expected.size > 0 &&
-      this.openDifferences().length === 0
+      this.openDifferences().length === 0 &&
+      (this.lastQa.orderForm === undefined || this.lastQa.orderForm.status === 'ok')
     );
   }
 
@@ -205,15 +210,20 @@ export class OrderState {
     };
   }
 
-  /** Expected basket plus the re-checks of the last fix, with any extra checks given (they win per product). */
+  /**
+   * Expected basket plus the re-checks of the last fix, with any extra checks given (they win per product), and the
+   * order form check of the last basket change.
+   */
   qaRequest(extraFocus: readonly QaFocus[] = []): QaRequest {
     const focus = new Map<string, QaFocus>();
     for (const f of [...this.lastFocus, ...extraFocus]) focus.set(normalizeName(f.name), f);
+    const orderForm = this.lastExecute?.orderForm;
     return {
       type: 'qa-request',
       shopId: this.shopId,
       expected: this.expectedItems(),
       focus: [...focus.values()].map((f) => ({ ...f, name: this.displayName(f.name) })),
+      ...(orderForm ? { orderForm } : {}),
     };
   }
 
@@ -244,6 +254,7 @@ export class OrderState {
     } else if (this.needsCheck) {
       lines.push('Basket not checked by QA yet.');
     }
+    if (this.lastExecute?.orderForm) lines.push(describeOrderForm(this.lastExecute.orderForm));
     if (this.isVerified()) lines.push('Basket verified: ready for the final message with the cart link.');
     return lines.join('\n');
   }

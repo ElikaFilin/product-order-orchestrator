@@ -174,11 +174,14 @@ export function registerTools(host: PluginHost, rt: Runtime): void {
       store.update(() => {
         const state = store.order;
         const open = state.acceptItems(items);
+        const formWrong = !state.needsCheck && state.lastQa?.orderForm !== undefined && state.lastQa.orderForm.status !== 'ok';
         const next = open.length
           ? `Still different from what the user wants: ${open.map(describeDifference).join('; ')}. Ask the user or fix with execute.`
           : state.isVerified()
             ? `Nothing differs any more. Send the final message with the basket link (${CART_LINK_PLACEHOLDER}).`
-            : `Verify the basket with poo_task {"agent":"qa"} before sending the link.`;
+            : formWrong
+              ? 'The basket is as the user wants, but the order form is not right: offer to fill it again with poo_task {"agent":"execute"}, then qa.'
+              : `Verify the basket with poo_task {"agent":"qa"} before sending the link.`;
         return text({ expected: state.expectedItems(), openDifferences: open, next });
       }),
   });
@@ -332,7 +335,7 @@ export function registerTools(host: PluginHost, rt: Runtime): void {
           cart: cart ?? [],
           ...(notes ? { notes } : {}),
         };
-        const result = finalizeExecuteResult(request, reported, shop.cartUrl, rt.pageOps.get(task.id));
+        const result = finalizeExecuteResult(request, reported, shop.cartUrl, rt.pageOps.get(task.id), rt.config.checkout);
         const summary = summarizeExecute(request.mode, result);
         store.order.applyExecuteResult(result, request.mode);
         store.touch(task, { state: 'completed', result, summary });

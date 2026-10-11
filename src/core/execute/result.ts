@@ -1,6 +1,15 @@
 import type { HelperCall } from '../browser/guard.js';
-import { normalizeName, type BasketOp, type CartLine, type ExecuteRequest, type ExecuteResult } from '../contracts.js';
-import { CartRead, SetQtyRead } from '../shops/helper-api.js';
+import {
+  normalizeName,
+  type BasketOp,
+  type CartLine,
+  type CheckoutDetails,
+  type ExecuteRequest,
+  type ExecuteResult,
+  type OrderFormCheck,
+} from '../contracts.js';
+import { checkOrderForm, describeOrderForm, uncheckedOrderForm } from '../order-form.js';
+import { CartRead, OrderFormRead, SetQtyRead } from '../shops/helper-api.js';
 
 type OpResult = ExecuteResult['ops'][number];
 type OpStatus = OpResult['status'];
@@ -14,6 +23,8 @@ export class PageOps {
   /** The last setQty per product (by the name the agent passed), with the target it asked for. */
   private readonly setQty = new Map<string, { targetQty: number; read: SetQtyRead; seq: number }>();
   private cart: { read: CartRead; seq: number } | undefined;
+  /** The last fillOrderForm() or readOrderForm(). */
+  private form: { read: OrderFormRead; seq: number } | undefined;
 
   record(call: HelperCall, value: unknown): void {
     this.seq += 1;
@@ -24,7 +35,21 @@ export class PageOps {
     } else if (call.method === 'readCart') {
       const read = CartRead.safeParse(value);
       if (read.success) this.cart = { read: read.data, seq: this.seq };
+    } else if (call.method === 'fillOrderForm' || call.method === 'readOrderForm') {
+      const read = OrderFormRead.safeParse(value);
+      if (read.success) this.form = { read: read.data, seq: this.seq };
     }
+  }
+
+  /** The order form as the page last showed it, checked against the user's details; only a read after every basket change counts. */
+  orderForm(expected: CheckoutDetails): OrderFormCheck {
+    if (!this.form) return uncheckedOrderForm('The order form was not filled.');
+    if (this.form.seq < this.lastChange()) return uncheckedOrderForm('The basket changed after the order form was last read.');
+    return checkOrderForm(expected, this.form.read);
+  }
+
+  private lastChange(): number {
+    return Math.max(0, ...[...this.setQty.values()].map((d) => d.seq));
   }
 
   /** The page's result for a requested operation: its last setQty call with the same name and target. */
@@ -41,8 +66,7 @@ export class PageOps {
 
   /** The basket from the last read that came after every change, if there was one. */
   finalCart(): CartLine[] | undefined {
-    const lastChange = Math.max(0, ...[...this.setQty.values()].map((d) => d.seq));
-    if (!this.cart || this.cart.seq < lastChange) return undefined;
+    if (!this.cart || this.cart.seq < this.lastChange()) return undefined;
     return this.cart.read.lines.map((l) => ({
       name: l.name,
       qty: l.qty,
@@ -56,9 +80,15 @@ export class PageOps {
 /**
  * Make the agent's report safe to act on: ids come from the request and the shop, every requested op appears
  * exactly once in request order, results the page returned win over the model's report, and "ok" is only
- * kept when the read-back quantity agrees.
+ * kept when the read-back quantity agrees. With `checkout`, the order form is checked from the page data only.
  */
-export function finalizeExecuteResult(request: ExecuteRequest, reported: ExecuteResult, cartUrl: string, page?: PageOps): ExecuteResult {
+export function finalizeExecuteResult(
+  request: ExecuteRequest,
+  reported: ExecuteResult,
+  cartUrl: string,
+  page?: PageOps,
+  checkout?: CheckoutDetails,
+): ExecuteResult {
   const reportedByName = new Map<string, OpResult>();
   for (const op of reported.ops) {
     const key = normalizeName(op.name);
@@ -77,6 +107,7 @@ export function finalizeExecuteResult(request: ExecuteRequest, reported: Execute
     cartUrl,
     ops: request.ops.map((op) => reconcile(op, page?.resultFor(op) ?? reportedByName.get(normalizeName(op.name)))),
     cart: page?.finalCart() ?? reported.cart,
+    ...(checkout ? { orderForm: page ? page.orderForm(checkout) : uncheckedOrderForm('The page data was not captured.') } : {}),
     ...(notes.length ? { notes: notes.join(' ') } : {}),
   };
 }
@@ -115,5 +146,6 @@ export function summarizeExecute(mode: ExecuteRequest['mode'], result: ExecuteRe
     `Basket ${mode === 'fix' ? 'fix' : 'fill'} finished: ${counts}.`,
     ...problems,
     `Basket now: ${lines.length} line(s), ${units} unit(s).`,
+    ...(result.orderForm ? [describeOrderForm(result.orderForm)] : []),
   ].join('\n');
 }
