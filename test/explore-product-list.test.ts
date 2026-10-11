@@ -2,7 +2,8 @@ import { copyFile, mkdtemp, readFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { defaultSkillFile, ProductList } from '../src/agents/explore/product-list.js';
+import { ROOT_DIR } from '../src/config/env.js';
+import { ProductList, skillFile } from '../src/core/explore/product-list.js';
 
 const SHOP = 'karashynyard';
 const KYIV_CUTLETS = 'Котлети по-київськи з індички, 900 г';
@@ -22,7 +23,7 @@ describe('Explore product list (ask-what-to-buy skill)', () => {
   beforeEach(async () => {
     dir = await mkdtemp(path.join(os.tmpdir(), 'explore-skill-'));
     file = path.join(dir, 'SKILL.md');
-    await copyFile(defaultSkillFile(), file);
+    await copyFile(skillFile(ROOT_DIR), file);
     list = new ProductList(file);
   });
 

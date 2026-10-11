@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createTabRedactor, hideForeignTabs } from '../src/browser/redact.js';
+import { createTabRedactor, hideForeignTabs } from '../src/core/browser/redact.js';
 
 const SHOP = ['https://karashynyard.com.ua'];
 const RESPONSE = [
@@ -42,14 +42,13 @@ describe('hideForeignTabs', () => {
 });
 
 describe('createTabRedactor', () => {
-  const redact = createTabRedactor({ allowedOrigins: SHOP }, { kind: 'playwright', serverName: 'playwright' });
+  const redact = createTabRedactor({ allowedOrigins: SHOP }, { prefix: 'playwright__' });
 
   it('rewrites only Playwright responses that list foreign tabs', () => {
-    const out = redact('mcp__playwright__browser_tabs', [{ type: 'text', text: RESPONSE }]) as Array<{ text: string }>;
+    const out = redact('playwright__browser_tabs', [{ type: 'text', text: RESPONSE }]) as Array<{ text: string }>;
     expect(out[0]?.text).not.toMatch(/mail\.example|bank\.example|token=abc|Inbox/);
-    expect(redact('mcp__playwright__browser_evaluate', [{ type: 'text', text: '### Result\n{"ready": true}' }])).toBeUndefined();
-    expect(redact('mcp__agent__ask_user', [{ type: 'text', text: RESPONSE }])).toBeUndefined();
-    const agentBrowser = createTabRedactor({ allowedOrigins: SHOP }, { kind: 'agent-browser', serverName: 'agent_browser' });
-    expect(agentBrowser('mcp__agent_browser__agent_browser_eval', { response: { data: { result: 1 } } })).toBeUndefined();
+    expect(redact('playwright__browser_evaluate', [{ type: 'text', text: '### Result\n{"ready": true}' }])).toBeUndefined();
+    expect(redact('poo_ask_user', [{ type: 'text', text: RESPONSE }])).toBeUndefined();
+    expect(redact('playwright__browser_tabs', 'not content blocks')).toBeUndefined();
   });
 });

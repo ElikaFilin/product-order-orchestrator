@@ -1,14 +1,13 @@
 /**
  * Live smoke test of a shop adapter and the browser guard: `pnpm smoke:shop [shopId]`.
  *
- * Starts a THROWAWAY headless Chrome (fresh temp profile, never the user's browser), spawns both browser
- * MCP servers exactly as browserToolset() configures them and sends every tool input through
- * createBrowserGuard(), so the helper injection is exercised end to end. Playwright plays Execute
- * (setQty add / increase / decrease / remove), agent-browser plays QA (cart icon -> cart window ->
- * readModal + readCart); then the roles swap (Playwright cart-icon click, agent-browser setQty cleanup),
- * since either server can be configured for either agent. The basket only exists in the throwaway
- * profile and the order form is never touched. Exits 1 on any mismatch, so maintainers can run it to
- * detect site drift. Optional env: CHROME_PATH (Chrome binary), SMOKE_PROFILE_PARENT (temp profile parent).
+ * Starts a THROWAWAY headless Chrome (fresh temp profile, never the user's browser), spawns two Playwright MCP
+ * servers with the flags the agents get, and sends every tool input through createBrowserGuard(), so the helper
+ * injection is exercised end to end. One session plays Execute (setQty add / increase / decrease / remove), the
+ * other plays QA in its own tab (cart icon -> cart window -> readModal + readCart), then empties the basket. The
+ * basket only exists in the throwaway profile and the order form is never touched. Exits 1 on any mismatch, so
+ * maintainers can run it to detect site drift. Optional env: CHROME_PATH (Chrome binary), SMOKE_PROFILE_PARENT
+ * (temp profile parent).
  */
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
@@ -19,13 +18,12 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { checkCdp } from '../browser/cdp.js';
-import { createBrowserGuard } from '../browser/guard.js';
-import { browserToolset, toolResultValue, type BrowserMcpKind, type BrowserToolset } from '../browser/mcp.js';
+import { playwrightMcpArgs, playwrightMcpCli } from '../browser/playwright-mcp.js';
 import { env, runtimeDir } from '../config/env.js';
-import { preview, Telemetry } from '../observability/telemetry.js';
-import type { GuardDecision, ToolGuard } from '../shared/claude.js';
-import { createLogger, errorMessage } from '../shared/logger.js';
-import { getShop, type ShopAdapter } from '../shops/index.js';
+import { createBrowserGuard, type GuardDecision, type ToolGuard } from '../core/browser/guard.js';
+import { browserToolset, toolResultValue, type BrowserToolset } from '../core/browser/toolset.js';
+import { errorMessage } from '../core/errors.js';
+import { getShop, type ShopAdapter } from '../core/shops/index.js';
 
 const CHROME = process.env.CHROME_PATH ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 /** Parent of the throwaway Chrome profile. Not TMPDIR itself: Playwright MCP needs a short TMPDIR for its sockets. */
@@ -44,7 +42,11 @@ interface ModalView { open: boolean; lines: Array<{ name: string; qty: number; a
 interface SetQtyResult { status: 'ok' | 'not_found' | 'failed'; name: string; before: number; after: number; detail?: string }
 interface Expected { name: string; qty: number; price: number }
 
-const log = createLogger('shop-smoke');
+/** A value as short text for the report. */
+function preview(value: unknown, max = 200): string {
+  const text = typeof value === 'string' ? value : JSON.stringify(value);
+  return text.length > max ? `${text.slice(0, max)}…` : text;
+}
 
 class Report {
   failures = 0;
@@ -59,24 +61,24 @@ class Report {
   }
 }
 
-/** One browser MCP server, called the way an agent's PreToolUse guard would let it. */
+/** One Playwright MCP server, called the way an agent's pre-tool-call guard would let it. */
 class BrowserSession {
   private constructor(
+    readonly label: string,
     readonly toolset: BrowserToolset,
     private readonly client: Client,
     private readonly guard: ToolGuard,
-    private readonly telemetry: Telemetry,
     private readonly stderr: string[],
   ) {}
 
-  static async start(toolset: BrowserToolset, shop: ShopAdapter, telemetry: Telemetry): Promise<BrowserSession> {
-    const server = toolset.server as { command: string; args?: string[]; env?: Record<string, string> };
-    const transport = new StdioClientTransport({ command: server.command, args: server.args, env: server.env, stderr: 'pipe' });
+  static async start(label: string, args: string[], toolset: BrowserToolset, shop: ShopAdapter): Promise<BrowserSession> {
+    // No env: the SDK passes only a safe default environment (HOME, PATH, ...), never the .env secrets.
+    const transport = new StdioClientTransport({ command: process.execPath, args: [playwrightMcpCli(), ...args], stderr: 'pipe' });
     const stderr: string[] = [];
     transport.stderr?.on('data', (chunk: Buffer) => stderr.push(chunk.toString()));
-    const client = new Client({ name: 'poo-shop-smoke', version: '0.1.0' });
+    const client = new Client({ name: `poo-shop-smoke-${label}`, version: '0.1.0' });
     await client.connect(transport);
-    return new BrowserSession(toolset, client, createBrowserGuard(shop, toolset), telemetry, stderr);
+    return new BrowserSession(label, toolset, client, createBrowserGuard(shop, toolset), stderr);
   }
 
   /** The guard's decision for a call (no tool is called). */
@@ -87,49 +89,23 @@ class BrowserSession {
   /** Call a tool through the guard; returns the parsed result. Throws on a denial or a tool error. */
   async call(tool: string, input: Record<string, unknown>): Promise<unknown> {
     const decision = this.decide(tool, input);
-    const event = { tool: this.toolset.tool(tool), input: preview(input) };
-    if (decision?.deny) {
-      this.telemetry.emit('tool_call', { ...event, denied: decision.deny });
-      throw new Error(`guard denied ${tool}: ${decision.deny}`);
-    }
-    this.telemetry.emit('tool_call', { ...event, rewritten: Boolean(decision?.updatedInput) });
-    return this.send(tool, decision?.updatedInput ?? input);
-  }
-
-  /**
-   * Test scaffolding only, never something an agent may do (the guard denies it): e.g. listing and selecting
-   * tabs to bring the right throwaway tab to the front.
-   */
-  callUnguarded(tool: string, input: Record<string, unknown>): Promise<unknown> {
-    return this.send(tool, input);
-  }
-
-  private async send(tool: string, input: Record<string, unknown>): Promise<unknown> {
-    const started = Date.now();
-    const result = await this.client.callTool({ name: tool, arguments: input }, undefined, { timeout: 120_000 });
-    const text = Array.isArray(result.content)
-      ? result.content.flatMap((c: { type: string; text?: string }) => (c.type === 'text' && c.text ? [c.text] : [])).join('\n')
-      : '';
-    this.telemetry.emit('tool_result', { tool: this.toolset.tool(tool), ok: !result.isError, durationMs: Date.now() - started, output: preview(text, 500) });
-    if (result.isError) throw new Error(`${tool} failed: ${preview(text, 500)}`);
-    return toolResultValue(this.toolset.kind, result);
+    if (decision?.deny) throw new Error(`guard denied ${tool}: ${decision.deny}`);
+    const result = await this.client.callTool({ name: tool, arguments: decision?.updatedInput ?? input }, undefined, { timeout: 120_000 });
+    if (result.isError) throw new Error(`${tool} failed: ${preview(toolResultValue(result), 500)}`);
+    return toolResultValue(result);
   }
 
   /** Evaluate an expression in the page (the guard injects the shop helper). */
   eval<T>(expression: string): Promise<T> {
-    const input = this.toolset.kind === 'playwright' ? { function: `() => ${expression}` } : { script: expression };
-    const evalTool = this.toolset.evalTool.name.slice(`mcp__${this.toolset.serverName}__`.length);
-    return this.call(evalTool, input) as Promise<T>;
+    return this.call('browser_evaluate', { function: `() => ${expression}` }) as Promise<T>;
   }
 
   stderrTail(): string {
     return this.stderr.join('').slice(-1_500);
   }
 
-  /** Stop the server, then whatever it leaves running (agent-browser's daemon), exactly as Execute/QA do. */
   async close(): Promise<void> {
     await this.client.close().catch(() => undefined);
-    await this.toolset.cleanup();
   }
 }
 
@@ -216,13 +192,13 @@ function sameLines(actual: Array<{ name: string; qty: number; amount: number | n
 
 const total = (expected: Expected[]) => expected.reduce((sum, e) => sum + e.qty * e.price, 0);
 
-/** Run after the Execute flow: the Playwright guard allows nothing but opening a tab until its run has one. */
-function checkGuard(report: Report, exe: BrowserSession, qa: BrowserSession, shop: ShopAdapter): void {
+/** Run after the Execute flow: the guard allows nothing but opening a tab until its run has one. */
+function checkGuard(report: Report, exe: BrowserSession, shop: ShopAdapter): void {
   report.section('guard');
   const denied = (d: GuardDecision | undefined) => Boolean(d?.deny);
   const fresh = createBrowserGuard(shop, exe.toolset);
   report.check(
-    'denies Playwright tools before the run opened its own tab',
+    'denies browser tools before the run opened its own tab',
     denied(fresh(exe.toolset.tool('browser_evaluate'), { function: '() => window.__poo.status()' })),
   );
   for (const action of ['list', 'select', 'close']) {
@@ -231,16 +207,15 @@ function checkGuard(report: Report, exe: BrowserSession, qa: BrowserSession, sho
   report.check('denies a page script that is not one helper call', denied(exe.decide('browser_evaluate', { function: '() => document.title' })));
   report.check(
     'denies a fetch to the fallback order endpoint',
-    denied(qa.decide('agent_browser_eval', { script: 'fetch("https://forms2.tildacdn.com/procces/", { method: "POST" })' })),
+    denied(exe.decide('browser_evaluate', { function: '() => fetch("https://forms2.tildacdn.com/procces/", { method: "POST" })' })),
   );
-  report.check('denies navigation to another origin (Playwright)', denied(exe.decide('browser_navigate', { url: 'https://example.com/' })));
-  report.check('denies navigation to another origin (agent-browser)', denied(qa.decide('agent_browser_open', { url: 'https://example.com/' })));
+  report.check('denies navigation to another origin', denied(exe.decide('browser_navigate', { url: 'https://example.com/' })));
   report.check('allows navigation to the cart URL', !denied(exe.decide('browser_navigate', { url: shop.cartUrl })));
   report.check(
     'denies an eval mentioning "Відправити замовлення"',
     denied(exe.decide('browser_evaluate', { function: '() => [...document.querySelectorAll("button")].find((b) => b.textContent.includes("Відправити замовлення"))?.click()' })),
   );
-  report.check('denies requestSubmit() in agent-browser eval', denied(qa.decide('agent_browser_eval', { script: 'document.forms[0].requestSubmit()' })));
+  report.check('denies requestSubmit() in a page script', denied(exe.decide('browser_evaluate', { function: '() => document.forms[0].requestSubmit()' })));
   report.check('denies a click on the order form', denied(exe.decide('browser_click', { target: '.t706__orderform button', element: 'order button' })));
   report.check('denies browser_run_code_unsafe', denied(exe.decide('browser_run_code_unsafe', { code: 'async (page) => page.title()' })));
   report.check('denies navigation from page scripts', denied(exe.decide('browser_evaluate', { function: '() => { location.href = "https://example.com/" }' })));
@@ -249,7 +224,7 @@ function checkGuard(report: Report, exe: BrowserSession, qa: BrowserSession, sho
 
 /** Execute role (Playwright MCP): returns the basket it leaves behind. */
 async function executeFlow(report: Report, exe: BrowserSession, shop: ShopAdapter, [a, b, c]: [string, string, string]): Promise<Expected[]> {
-  report.section(`execute via ${exe.toolset.kind}`);
+  report.section('execute');
   await exe.call('browser_tabs', { action: 'new', url: shop.baseUrl });
   const status = await waitReady(exe);
   report.check('page ready, helper injected', status.ready, status.url);
@@ -297,43 +272,53 @@ async function executeFlow(report: Report, exe: BrowserSession, shop: ShopAdapte
   return expected;
 }
 
+/** Poll readModal until the cart window is open (at most `tries` x 500 ms). */
+async function waitModal(qa: BrowserSession, tries = 20): Promise<ModalView> {
+  let modal = await qa.eval<ModalView>('window.__poo.readModal()');
+  for (let i = 0; i < tries && !modal.open; i++) {
+    await sleep(500);
+    modal = await qa.eval<ModalView>('window.__poo.readModal()');
+  }
+  return modal;
+}
+
 /** Click the cart icon like the user (QA playbook order); returns which way opened the cart window. */
 async function openCartLikeUser(qa: BrowserSession, shop: ShopAdapter): Promise<string> {
+  const [icon, ...otherOpeners] = shop.cartOpeners;
   const attempts: Array<[string, () => Promise<unknown>]> = [
-    ['cart icon', () => qa.call('agent_browser_click', { selector: '.t706__carticon-wrapper' })],
-    ['header cart icon', () => qa.call('agent_browser_click', { selector: 'a.t-menuwidgeticons__link_cart' })],
-    ['#opencart page load', async () => {
-      await qa.call('agent_browser_open', { url: 'about:blank' });
-      await qa.call('agent_browser_open', { url: shop.cartUrl });
+    ['cart icon', () => qa.call('browser_click', { target: icon, element: 'cart icon' })],
+    ...otherOpeners.map((target): [string, () => Promise<unknown>] => [target, () => qa.call('browser_click', { target, element: 'cart icon' })]),
+    ['cart link page load', async () => {
+      await qa.call('browser_navigate', { url: 'about:blank' });
+      await qa.call('browser_navigate', { url: shop.cartUrl });
     }],
   ];
   for (const [label, attempt] of attempts) {
     try {
       await attempt();
-      await qa.call('agent_browser_wait_for_selector', { selector: '.t706__cartwin.t706__cartwin_showed', waitTimeoutMs: 10_000 });
-      return label;
-    } catch (err) {
-      log.debug({ label, err: errorMessage(err) }, 'cart did not open this way');
+      if ((await waitModal(qa)).open) return label;
+    } catch {
+      // try the next way
     }
   }
-  throw new Error('the cart window did not open (cart icon, header icon, #opencart)');
+  throw new Error(`the cart window did not open (${shop.cartOpeners.join(', ')}, ${shop.cartUrl})`);
 }
 
-/** QA role (agent-browser MCP), in its own tab of the same profile. */
+/** QA role, in its own tab of the same profile (opened last, so it is the tab in front). */
 async function qaFlow(report: Report, qa: BrowserSession, shop: ShopAdapter, expected: Expected[]): Promise<void> {
-  report.section(`qa via ${qa.toolset.kind}`);
-  await qa.call('agent_browser_open', { url: shop.baseUrl });
+  report.section('qa');
+  await qa.call('browser_tabs', { action: 'new', url: shop.baseUrl });
   const status = await waitReady(qa);
   report.check('own tab ready, sees the same basket', status.cartLines === expected.length, `${status.cartLines} lines, ${status.total} UAH`);
 
   const how = await openCartLikeUser(qa, shop);
   report.check('cart window opened by clicking the top-right cart icon', how === 'cart icon', how);
 
-  const visible = String(await qa.call('agent_browser_get_text', { selector: '.t706__cartwin-products' }));
-  const unseen = expected.filter((e) => !visible.includes(e.name)).map((e) => e.name);
-  report.check('cart window text lists every line', unseen.length === 0, unseen.length ? `not shown: ${unseen.join(', ')}` : preview(visible.replace(/\s+/g, ' '), 160));
+  const snapshot = String(await qa.call('browser_snapshot', { target: '.t706__cartwin-products' }));
+  const unseen = expected.filter((e) => !snapshot.includes(e.name)).map((e) => e.name);
+  report.check('cart window snapshot lists every line', unseen.length === 0, unseen.length ? `not shown: ${unseen.join(', ')}` : `${snapshot.length} chars`);
 
-  const modal = await qa.eval<ModalView>('window.__poo.readModal()');
+  const modal = await waitModal(qa, 0);
   const modalProblems = sameLines(modal.lines, expected);
   report.check('readModal: window open', modal.open);
   report.check('readModal matches', !modalProblems, modalProblems || `${modal.lines.length} lines`);
@@ -344,31 +329,9 @@ async function qaFlow(report: Report, qa: BrowserSession, shop: ShopAdapter, exp
   report.check('readCart (QA tab) matches the cart window', !cartProblems && cart.total === modal.total, cartProblems || `${cart.total} UAH`);
 }
 
-/** The QA click path with Playwright MCP (for QA_BROWSER_MCP=playwright), in the Execute tab. */
-async function playwrightCartIcon(report: Report, exe: BrowserSession, expected: Expected[]): Promise<void> {
-  report.section(`qa click path via ${exe.toolset.kind}`);
-  // agent-browser's tab is in front now, and Playwright's click waits for animation frames that a hidden
-  // tab never renders: bring our own tab (the current one) to the front first.
-  const tabs = String(await exe.callUnguarded('browser_tabs', { action: 'list' }));
-  const current = tabs.match(/^- (\d+): \(current\)/m);
-  if (current) await exe.callUnguarded('browser_tabs', { action: 'select', index: Number(current[1]) });
-  await exe.call('browser_click', { target: '.t706__carticon-wrapper', element: 'cart icon' });
-  let modal = await exe.eval<ModalView>('window.__poo.readModal()');
-  for (let i = 0; i < 10 && !modal.open; i++) {
-    await sleep(500);
-    modal = await exe.eval<ModalView>('window.__poo.readModal()');
-  }
-  report.check('cart icon click opens the cart window', modal.open);
-  const snapshot = String(await exe.call('browser_snapshot', { target: '.t706__cartwin-products' }));
-  const unseen = expected.filter((e) => !snapshot.includes(e.name)).map((e) => e.name);
-  report.check('cart window snapshot lists every line', unseen.length === 0, unseen.length ? `not shown: ${unseen.join(', ')}` : `${snapshot.length} chars`);
-  const problems = sameLines(modal.lines, expected);
-  report.check('readModal matches', !problems && modal.total === total(expected), problems || `${modal.total} UAH`);
-}
-
 /** Empty the basket through `session` and confirm every tab of the profile sees it empty. */
 async function emptyBasket(report: Report, session: BrowserSession, other: BrowserSession, expected: Expected[]): Promise<void> {
-  report.section(`cleanup via ${session.toolset.kind}`);
+  report.section(`cleanup via the ${session.label} session`);
   for (const { name } of expected) {
     const started = Date.now();
     const r = await session.eval<SetQtyResult>(`window.__poo.setQty(${JSON.stringify(name)}, 0)`);
@@ -380,7 +343,7 @@ async function emptyBasket(report: Report, session: BrowserSession, other: Brows
   }
   for (const s of [session, other]) {
     const cart = await s.eval<CartView>('window.__poo.readCart()');
-    report.check(`basket is empty (${s.toolset.kind} tab)`, cart.lines.length === 0, `${cart.lines.length} lines`);
+    report.check(`basket is empty (${s.label} tab)`, cart.lines.length === 0, `${cart.lines.length} lines`);
   }
 }
 
@@ -390,44 +353,41 @@ async function main(): Promise<void> {
   if (!probes) throw new Error(`No smoke-test products configured for shop "${shop.id}" (see PROBES in ${import.meta.filename}).`);
 
   const report = new Report();
-  const telemetry = new Telemetry('shop-smoke');
   const runDir = runtimeDir('runs', `smoke-${shop.id}-${Date.now()}`);
-  telemetry.status('busy', `smoke test of ${shop.id}`);
   const chrome = await startChrome();
   process.stdout.write(`shop ${shop.name}; throwaway ${chrome.browser} at ${chrome.cdpUrl}; artifacts ${runDir}\n`);
 
   const sessions: BrowserSession[] = [];
-  // The QA role has every tool the Execute role has, plus the basket-icon click both sessions need here.
-  const toolset = (kind: BrowserMcpKind) =>
-    browserToolset(kind, {
-      role: 'qa',
-      connection: { mode: 'cdp', cdpUrl: chrome.cdpUrl },
-      outputDir: path.join(runDir, kind),
-      blockedOrigins: shop.blockedOrigins,
-      session: `smoke-${process.pid}`,
-    });
+  // Both sessions get QA's tools (Execute's plus the basket-icon click), attached over CDP like the e2e.
+  const start = (label: string) =>
+    BrowserSession.start(
+      label,
+      playwrightMcpArgs({
+        connection: { mode: 'cdp', cdpUrl: chrome.cdpUrl },
+        outputDir: path.join(runDir, label),
+        blockedOrigins: shop.blockedOrigins,
+      }),
+      browserToolset({ role: 'qa', mode: 'cdp' }),
+      shop,
+    );
   try {
-    const exe = await BrowserSession.start(toolset('playwright'), shop, telemetry);
+    const exe = await start('execute');
     sessions.push(exe);
-    const qa = await BrowserSession.start(toolset('agent-browser'), shop, telemetry);
-    sessions.push(qa);
-
     const expected = await executeFlow(report, exe, shop, probes);
-    checkGuard(report, exe, qa, shop);
+    checkGuard(report, exe, shop);
+    const qa = await start('qa');
+    sessions.push(qa);
     await qaFlow(report, qa, shop, expected);
-    await playwrightCartIcon(report, exe, expected);
     await emptyBasket(report, qa, exe, expected);
   } catch (err) {
     report.check('smoke run completed', false, errorMessage(err));
-    for (const s of sessions) log.error({ server: s.toolset.serverName, stderr: s.stderrTail() }, 'MCP server stderr');
+    for (const s of sessions) process.stderr.write(`--- ${s.label} MCP server stderr:\n${s.stderrTail()}\n`);
   } finally {
     for (const s of sessions) await s.close();
     await chrome.stop();
   }
 
   process.stdout.write(`\n${report.failures === 0 ? 'SMOKE OK' : `SMOKE FAILED: ${report.failures} check(s)`}\n`);
-  telemetry.status(report.failures === 0 ? 'idle' : 'error', `smoke test of ${shop.id}: ${report.failures} failure(s)`);
-  await telemetry.shutdown();
   process.exitCode = report.failures === 0 ? 0 : 1;
 }
 

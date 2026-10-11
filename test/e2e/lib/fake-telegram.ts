@@ -125,7 +125,7 @@ export async function startFakeTelegram(opts: { token: string; userId: number })
           return reply(res, updates.slice(0, limit));
         }
         case 'sendMessage': {
-          if (body.chat_id !== opts.userId) violations.push(`sendMessage to chat ${String(body.chat_id)}`);
+          if (String(body.chat_id) !== String(opts.userId)) violations.push(`sendMessage to chat ${String(body.chat_id)}`);
           const text = String(body.text ?? '');
           transcript.push({ dir: 'bot', text, at: new Date().toISOString() });
           return reply(res, {

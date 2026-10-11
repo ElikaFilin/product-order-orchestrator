@@ -1,24 +1,21 @@
 import vm from 'node:vm';
 import { describe, expect, it } from 'vitest';
-import { createBrowserGuard, parseHelperCall, withHelper } from '../src/browser/guard.js';
-import { browserToolset, type BrowserMcpKind, type BrowserRole } from '../src/browser/mcp.js';
-import type { ToolGuard } from '../src/shared/claude.js';
-import { karashynyard } from '../src/shops/karashynyard/index.js';
-import type { ShopAdapter } from '../src/shops/types.js';
+import { createBrowserGuard, parseHelperCall, withHelper, type ToolGuard } from '../src/core/browser/guard.js';
+import { browserToolset, type BrowserRole } from '../src/core/browser/toolset.js';
+import { karashynyard } from '../src/core/shops/karashynyard/index.js';
+import type { ShopAdapter } from '../src/core/shops/types.js';
 
 const SHOP_ORIGIN = 'https://karashynyard.com.ua';
-const toolset = (kind: BrowserMcpKind, role: BrowserRole = 'execute') =>
-  browserToolset(kind, { role, connection: { mode: 'cdp', cdpUrl: 'http://127.0.0.1:9333' }, outputDir: '/tmp/poo-test', blockedOrigins: karashynyard.blockedOrigins, session: 'test' });
-const pw = toolset('playwright', 'qa');
-const ab = toolset('agent-browser', 'qa');
+const toolset = (role: BrowserRole = 'execute') => browserToolset({ role, mode: 'cdp' });
+const pw = toolset('qa');
 
-/** A Playwright guard whose run has already opened its own tab, and an agent-browser guard (always in its own tab). */
-function guards(shop: ShopAdapter = karashynyard): { pwGuard: ToolGuard; abGuard: ToolGuard } {
-  const pwGuard = createBrowserGuard(shop, pw);
-  expect(pwGuard(pw.tool('browser_tabs'), { action: 'new', url: shop.baseUrl })).toBeUndefined();
-  return { pwGuard, abGuard: createBrowserGuard(shop, ab) };
+/** A guard (attached over CDP) whose run has already opened its own tab. */
+function openedGuard(shop: ShopAdapter = karashynyard): ToolGuard {
+  const guard = createBrowserGuard(shop, pw);
+  expect(guard(pw.tool('browser_tabs'), { action: 'new', url: shop.baseUrl })).toBeUndefined();
+  return guard;
 }
-const { pwGuard, abGuard } = guards();
+const pwGuard = openedGuard();
 
 /** A shop whose helper is easy to observe from Node. */
 const fakeShop: ShopAdapter = {
@@ -35,26 +32,20 @@ function page(origin = SHOP_ORIGIN): vm.Context {
 }
 
 describe('browser tool lists per role', () => {
-  it.each(['playwright', 'agent-browser'] as const)('%s: nothing types, presses keys, fills forms or touches other tabs', (kind) => {
+  it('nothing types, presses keys, fills forms or touches other tabs; only QA clicks', () => {
     for (const role of ['execute', 'qa'] as const) {
-      const names = toolset(kind, role).allowedTools.join(' ');
-      expect(names).not.toMatch(/_(type|fill|fill_form|press|press_key|hover|select_option|tab_list|tab_switch|reload|resize|run_code_unsafe)\b/);
+      const names = toolset(role).allowedTools.join(' ');
+      expect(names).not.toMatch(/_(type|fill|fill_form|press|press_key|hover|select_option|reload|resize|run_code_unsafe|file_upload)\b/);
     }
-    expect(toolset(kind, 'execute').allowedTools.some((t) => t.endsWith('click'))).toBe(false);
-    expect(toolset(kind, 'qa').allowedTools).toContain(toolset(kind, 'qa').clickTool.name);
-  });
-
-  it('blanks the secrets the CLI would otherwise pass on to the browser servers', () => {
-    for (const kind of ['playwright', 'agent-browser'] as const) {
-      const env = toolset(kind).server.env ?? {};
-      for (const key of ['ANTHROPIC_API_KEY', 'TELEGRAM_BOT_TOKEN', 'TELEGRAM_API_ROOT', 'TELEGRAM_ALLOWED_USER_ID']) expect(env[key]).toBe('');
-    }
+    expect(toolset('execute').allowedTools.some((t) => t.endsWith('click'))).toBe(false);
+    expect(toolset('qa').allowedTools).toContain(toolset('qa').clickTool.name);
   });
 });
 
 describe('createBrowserGuard: scope and allow-list', () => {
   it('ignores tools of other servers', () => {
-    expect(pwGuard('mcp__agent__ask_user', { question: 'Відправити замовлення?' })).toBeUndefined();
+    expect(pwGuard('poo_ask_user', { question: 'Відправити замовлення?' })).toBeUndefined();
+    expect(pwGuard('mcp__playwright__browser_evaluate', { function: '() => document.title' })).toBeUndefined();
   });
 
   it.each([
@@ -62,45 +53,24 @@ describe('createBrowserGuard: scope and allow-list', () => {
     [pwGuard, pw.tool('browser_file_upload'), { paths: ['/etc/passwd'] }],
     [pwGuard, pw.tool('browser_type'), { target: '@e12', text: 'Олена' }],
     [pwGuard, pw.tool('browser_press_key'), { key: 'Enter' }],
-    [abGuard, ab.tool('agent_browser_close'), {}],
-    [abGuard, ab.tool('agent_browser_read'), { url: 'https://karashynyard.com.ua/' }],
-    [abGuard, ab.tool('agent_browser_fill'), { selector: '@e12', text: 'Олена' }],
-    [abGuard, ab.tool('agent_browser_press'), { key: 'Enter' }],
-    [abGuard, ab.tool('agent_browser_tab_switch'), { index: 0 }],
-    [abGuard, ab.tool('agent_browser_tab_list'), {}],
+    [pwGuard, pw.tool('browser_fill_form'), { fields: [] }],
   ])('denies browser tools outside the allow-list: %#', (guard, tool, input) => {
     expect(guard(tool, input)?.deny).toMatch(/not available/);
   });
 
   it('allows a plain allowed call unchanged', () => {
     expect(pwGuard(pw.tool('browser_snapshot'), { target: '.t706__cartwin-products' })).toBeUndefined();
-    expect(abGuard(ab.tool('agent_browser_click'), { selector: '.t706__carticon-wrapper' })).toBeUndefined();
   });
 
-  it('denies raw CLI flags, file paths and form submission flags', () => {
-    expect(abGuard(ab.tool('agent_browser_open'), { url: karashynyard.baseUrl, extraArgs: ['--allow-file-access'] })?.deny).toMatch(/extraArgs/);
-    expect(abGuard(ab.tool('agent_browser_screenshot'), { path: '/Users/me/.zshrc' })?.deny).toMatch(/path/);
+  it('denies file paths and form submission flags', () => {
+    expect(pwGuard(pw.tool('browser_snapshot'), { path: '/Users/me/.zshrc' })?.deny).toMatch(/path/);
     expect(pwGuard(pw.tool('browser_take_screenshot'), { scale: 'css', filename: '../../x.png' })?.deny).toMatch(/filename/);
     expect(pwGuard(pw.tool('browser_click'), { target: 'e12', element: 'x', submit: true })?.deny).toMatch(/Submitting/);
-  });
-
-  it.each([
-    ['session', { session: 'default' }],
-    ['namespace', { namespace: 'other' }],
-    ['idleTimeout', { idleTimeout: '1s' }],
-    ['restore', { restore: true }],
-    ['restoreCheckFn', { restoreCheckFn: 'document.title' }],
-  ])('denies agent-browser session option %s', (field, extra) => {
-    expect(abGuard(ab.tool('agent_browser_get_url'), extra)?.deny).toContain(`"${field}"`);
-  });
-
-  it('denies opening a link in a new, unpinned tab', () => {
-    expect(abGuard(ab.tool('agent_browser_click'), { selector: 'a', newTab: true })?.deny).toMatch(/newTab/);
   });
 });
 
 describe("createBrowserGuard: the user's tabs", () => {
-  it('Playwright: nothing runs before this run opened its own tab, then everything allowed does', () => {
+  it('over CDP: nothing runs before this run opened its own tab, then everything allowed does', () => {
     const guard = createBrowserGuard(karashynyard, pw);
     for (const [tool, input] of [
       ['browser_evaluate', { function: '() => window.__poo.status()' }],
@@ -114,19 +84,13 @@ describe("createBrowserGuard: the user's tabs", () => {
     expect(guard(pw.tool('browser_evaluate'), { function: '() => window.__poo.status()' })?.updatedInput).toBeDefined();
   });
 
-  it.each(['list', 'select', 'close'])('Playwright: never lists, selects or closes tabs (%s)', (action) => {
+  it.each(['list', 'select', 'close'])('never lists, selects or closes tabs (%s)', (action) => {
     expect(pwGuard(pw.tool('browser_tabs'), { action, index: 0 })?.deny).toMatch(/belong to the user/);
     expect(pwGuard(pw.tool('browser_tabs'), { action })?.deny).toMatch(/belong to the user/);
   });
 
   describe('Playwright through the extension (the session sees only its own tab group)', () => {
-    const viaExtension = browserToolset('playwright', {
-      role: 'execute',
-      connection: { mode: 'extension', profileDir: 'Default' },
-      outputDir: '/tmp/poo-test',
-      blockedOrigins: [],
-      session: 'test',
-    });
+    const viaExtension = browserToolset({ role: 'execute', mode: 'extension' });
     const tool = viaExtension.tool;
 
     it("starts in its own tab: the extension's connect page opened for this run", () => {
@@ -150,12 +114,8 @@ describe("createBrowserGuard: the user's tabs", () => {
     });
   });
 
-  it('Playwright over CDP never closes a tab, not even the current one', () => {
+  it('over CDP never closes a tab, not even the current one', () => {
     expect(pwGuard(pw.tool('browser_tabs'), { action: 'close' })?.deny).toMatch(/belong to the user/);
-  });
-
-  it('agent-browser works in its own pinned tab from the first call', () => {
-    expect(createBrowserGuard(karashynyard, ab)(ab.evalTool.name, { script: 'window.__poo.status()' })?.updatedInput).toBeDefined();
   });
 });
 
@@ -168,7 +128,6 @@ describe('createBrowserGuard: navigation allow-list', () => {
   ])('allows %s', (url) => {
     expect(pwGuard(pw.tool('browser_navigate'), { url })).toBeUndefined();
     expect(createBrowserGuard(karashynyard, pw)(pw.tool('browser_tabs'), { action: 'new', url })).toBeUndefined();
-    expect(abGuard(ab.tool('agent_browser_open'), { url })).toBeUndefined();
   });
 
   it.each([
@@ -183,12 +142,10 @@ describe('createBrowserGuard: navigation allow-list', () => {
   ])('denies %s', (url) => {
     expect(pwGuard(pw.tool('browser_navigate'), { url })?.deny).toMatch(/not allowed/);
     expect(pwGuard(pw.tool('browser_tabs'), { action: 'new', url })?.deny).toMatch(/not allowed/);
-    expect(abGuard(ab.tool('agent_browser_open'), { url })?.deny).toMatch(/not allowed/);
   });
 
   it('allows opening a blank tab without a url', () => {
     expect(pwGuard(pw.tool('browser_tabs'), { action: 'new' })).toBeUndefined();
-    expect(abGuard(ab.tool('agent_browser_open'), {})).toBeUndefined();
   });
 });
 
@@ -202,7 +159,6 @@ describe('createBrowserGuard: page scripts are single helper calls', () => {
     '() => window.__poo.setQty("a), evil(", 0)',
   ])('allows %s', (code) => {
     expect(pwGuard(pw.evalTool.name, { function: code })?.updatedInput).toBeDefined();
-    expect(abGuard(ab.evalTool.name, { script: code })?.updatedInput).toBeDefined();
   });
 
   it.each([
@@ -219,7 +175,6 @@ describe('createBrowserGuard: page scripts are single helper calls', () => {
     'document.querySelector(".t706__product-del").click()',
   ])('denies %s', (code) => {
     expect(pwGuard(pw.evalTool.name, { function: code })?.deny).toBeTruthy();
-    expect(abGuard(ab.evalTool.name, { script: code })?.deny).toBeTruthy();
   });
 
   it('parses the call and its literal arguments', () => {
@@ -232,18 +187,18 @@ describe('createBrowserGuard: page scripts are single helper calls', () => {
 describe('createBrowserGuard: order form patterns', () => {
   it.each([
     [pwGuard, pw.evalTool.name, { function: '() => window.__poo.find("Відправити замовлення")' }],
-    [abGuard, ab.evalTool.name, { script: 'document.querySelector("form").requestSubmit()' }],
+    [pwGuard, pw.evalTool.name, { function: '() => document.querySelector("form").requestSubmit()' }],
     [pwGuard, pw.tool('browser_click'), { target: '.t706__orderform .t-submit', element: 'order button' }],
     [pwGuard, pw.tool('browser_click'), { target: 'e3647', element: 'Відправити замовлення button' }],
-    [abGuard, ab.evalTool.name, { script: 'fetch("https://forms2.tildacdn.com/procces/", { method: "POST" })' }],
+    [pwGuard, pw.evalTool.name, { function: '() => fetch("https://forms2.tildacdn.com/procces/", { method: "POST" })' }],
   ])('denies order-form input %#', (guard, tool, input) => {
     expect(guard(tool, input)?.deny).toMatch(/karashynyard safety rules/);
   });
 });
 
 describe('createBrowserGuard: helper injection', () => {
-  it('Playwright: rewrites only `function`, keeps other fields, and the result behaves like the original', async () => {
-    const { pwGuard: guard } = guards(fakeShop);
+  it('rewrites only `function`, keeps other fields, and the result behaves like the original', async () => {
+    const guard = openedGuard(fakeShop);
     const input = { function: '() => window.__poo.ping()', element: 'cart', target: '.t706__cartwin' };
     const updated = guard(pw.evalTool.name, input)?.updatedInput as typeof input;
     expect(updated.element).toBe('cart');
@@ -254,30 +209,12 @@ describe('createBrowserGuard: helper injection', () => {
 
     // Playwright MCP evaluates `(${function})` and calls the value (with the element when targeted).
     const run = (code: string, origin?: string) =>
-      Promise.resolve().then(() => vm.runInContext(`(${withHelper('playwright', fakeShop, code)})`, page(origin))(undefined) as unknown);
+      Promise.resolve().then(() => vm.runInContext(`(${withHelper(fakeShop, code)})`, page(origin))(undefined) as unknown);
     await expect(run('() => window.__poo.ping()')).resolves.toBe('pong');
     await expect(run('window.__poo.ping() + "!"')).resolves.toBe('pong!');
     await expect(run('async () => { await null; return 42 }')).resolves.toBe(42);
     await expect(run('() => 1 // trailing comment')).resolves.toBe(1);
     await expect(run('() => window.__poo.ping()', 'https://mail.example.com')).rejects.toThrow(/not on the shop/);
-  });
-
-  it('agent-browser: prepends the helper to `script` and keeps classic-script semantics', async () => {
-    const { abGuard: guard } = guards(fakeShop);
-    const input = { script: 'window.__poo.echo("x")', allowedDomains: ['karashynyard.com.ua'] };
-    const updated = guard(ab.evalTool.name, input)?.updatedInput as typeof input;
-    expect(updated.allowedDomains).toEqual(['karashynyard.com.ua']);
-    expect(updated.script).toContain(fakeShop.helperSource);
-    expect(updated.script.endsWith(input.script)).toBe(true);
-
-    // agent-browser returns the completion value of a classic script and awaits a returned promise.
-    const context = page();
-    const run = (script: string) => Promise.resolve(vm.runInContext(withHelper('agent-browser', fakeShop, script), context));
-    await expect(run('window.__poo.ping()')).resolves.toBe('pong');
-    await expect(run('var n = 2; n * 21')).resolves.toBe(42);
-    await expect(run('Promise.resolve(window.__poo.ping())')).resolves.toBe('pong');
-    expect(vm.runInContext('window.installs', context)).toBe(1); // the helper is installed once
-    expect(() => vm.runInContext(withHelper('agent-browser', fakeShop, 'window.__poo.ping()'), page('null'))).toThrow(/not on the shop/);
   });
 
   it('does not rewrite other tools', () => {

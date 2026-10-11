@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { readOnlyBasketGuard } from '../src/agents/qa/guard.js';
-import { PageReads, QaObservation, summarizeQa, toQaResult } from '../src/agents/qa/report.js';
-import { buildQaPrompt, resolveQaRequest } from '../src/agents/qa/request.js';
-import { QaResult, type CartLine, type QaRequest } from '../src/shared/contracts.js';
-import { karashynyard } from '../src/shops/karashynyard/index.js';
-import { AgentTaskError } from '../src/shared/task-executor.js';
+import { readOnlyBasketGuard } from '../src/core/qa/guard.js';
+import { PageReads, QaObservation, summarizeQa, toQaResult } from '../src/core/qa/report.js';
+import { buildQaPrompt, resolveQaRequest } from '../src/core/qa/request.js';
+import { QaResult, type CartLine, type QaRequest } from '../src/core/contracts.js';
+import { karashynyard } from '../src/core/shops/karashynyard/index.js';
+import { AgentTaskError } from '../src/core/errors.js';
 
 const FILLET = 'Філе зі стегна індички, 1 кг';
 const LIVER = 'Печінка індички, 500 г';
@@ -238,8 +238,8 @@ describe('summarizeQa', () => {
 
 describe('readOnlyBasketGuard', () => {
   const toolset = {
-    evalTool: { name: 'mcp__agent_browser__agent_browser_eval', codeField: 'script' as const },
-    clickTool: { name: 'mcp__agent_browser__agent_browser_click', selectorField: 'selector' as const },
+    evalTool: { name: 'playwright__browser_evaluate', codeField: 'function' as const },
+    clickTool: { name: 'playwright__browser_click', selectorField: 'target' as const },
   };
 
   it('denies page scripts that change the basket or are not one read call of the helper', () => {
@@ -254,7 +254,7 @@ describe('readOnlyBasketGuard', () => {
       'return [__poo.readModal(), __poo.readCart(), localStorage.getItem("tcart")]',
       'var f = document.querySelector(".t706__cartwin form"); f.querySelector("button").click()',
     ]) {
-      expect(guard(toolset.evalTool.name, { script })?.deny, script).toMatch(/read-only/);
+      expect(guard(toolset.evalTool.name, { function: script })?.deny, script).toMatch(/read-only/);
     }
     expect(shopGuard).not.toHaveBeenCalled();
   });
@@ -263,20 +263,20 @@ describe('readOnlyBasketGuard', () => {
     const shopGuard = vi.fn(() => undefined);
     const guard = readOnlyBasketGuard(toolset, karashynyard, shopGuard);
     for (const selector of ['@e47', '.t706__product-del', '.t706__product-plus', 'button[type=button]', '.t706__cartwin .t-submit']) {
-      expect(guard(toolset.clickTool.name, { selector })?.deny, selector).toMatch(/only click the basket icon/);
+      expect(guard(toolset.clickTool.name, { target: selector })?.deny, selector).toMatch(/only click the basket icon/);
     }
     expect(guard(toolset.clickTool.name, {})?.deny).toMatch(/only click the basket icon/);
     expect(shopGuard).not.toHaveBeenCalled();
   });
 
   it('defers read calls, basket-icon clicks and other tools to the shop guard', () => {
-    const shopGuard = vi.fn((tool: string) => (tool.endsWith('get_text') ? { deny: 'checkout' } : undefined));
+    const shopGuard = vi.fn((tool: string) => (tool.endsWith('snapshot') ? { deny: 'checkout' } : undefined));
     const guard = readOnlyBasketGuard(toolset, karashynyard, shopGuard);
-    expect(guard(toolset.evalTool.name, { script: 'window.__poo.readModal()' })).toBeUndefined();
-    expect(guard(toolset.evalTool.name, { script: 'window.__poo.status()' })).toBeUndefined();
-    expect(guard(toolset.clickTool.name, { selector: '.t706__carticon-wrapper' })).toBeUndefined();
-    expect(guard(toolset.clickTool.name, { selector: 'a.t-menuwidgeticons__link_cart' })).toBeUndefined();
-    expect(guard('mcp__agent_browser__agent_browser_get_text', { selector: '.t706__orderform' })).toEqual({ deny: 'checkout' });
+    expect(guard(toolset.evalTool.name, { function: '() => window.__poo.readModal()' })).toBeUndefined();
+    expect(guard(toolset.evalTool.name, { function: 'window.__poo.status()' })).toBeUndefined();
+    expect(guard(toolset.clickTool.name, { target: '.t706__carticon-wrapper' })).toBeUndefined();
+    expect(guard(toolset.clickTool.name, { target: 'a.t-menuwidgeticons__link_cart' })).toBeUndefined();
+    expect(guard('playwright__browser_snapshot', { target: '.t706__orderform' })).toEqual({ deny: 'checkout' });
     expect(shopGuard).toHaveBeenCalledTimes(5);
   });
 });

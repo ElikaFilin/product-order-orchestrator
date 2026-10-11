@@ -7,7 +7,6 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, mkdirSync, openSync, closeSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { setTimeout as sleep } from 'node:timers/promises';
-import WebSocket from 'ws';
 
 export const DEFAULT_CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 
@@ -32,8 +31,8 @@ export class CdpPage {
     private readonly ws: WebSocket,
     private readonly http: string,
   ) {
-    ws.on('message', (raw) => {
-      const msg = JSON.parse(String(raw)) as { id?: number; result?: unknown; error?: { message: string } };
+    ws.addEventListener('message', (event) => {
+      const msg = JSON.parse(String(event.data)) as { id?: number; result?: unknown; error?: { message: string } };
       if (msg.id === undefined) return;
       const p = this.pending.get(msg.id);
       if (!p) return;
@@ -41,7 +40,7 @@ export class CdpPage {
       if (msg.error) p.reject(new Error(msg.error.message));
       else p.resolve(msg.result);
     });
-    ws.on('close', () => {
+    ws.addEventListener('close', () => {
       for (const p of this.pending.values()) p.reject(new Error('CDP socket closed'));
       this.pending.clear();
     });
@@ -52,10 +51,10 @@ export class CdpPage {
     if (!res.ok) throw new Error(`CDP /json/new failed: HTTP ${res.status}`);
     const target = (await res.json()) as TargetInfo;
     if (!target.webSocketDebuggerUrl) throw new Error('CDP target without webSocketDebuggerUrl');
-    const ws = new WebSocket(target.webSocketDebuggerUrl, { perMessageDeflate: false });
+    const ws = new WebSocket(target.webSocketDebuggerUrl);
     await new Promise<void>((resolve, reject) => {
-      ws.once('open', () => resolve());
-      ws.once('error', reject);
+      ws.addEventListener('open', () => resolve(), { once: true });
+      ws.addEventListener('error', () => reject(new Error('CDP socket error')), { once: true });
     });
     return new CdpPage(target.id, ws, http);
   }

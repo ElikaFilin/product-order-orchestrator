@@ -1,12 +1,12 @@
 /**
  * The user's own Google Chrome on macOS (BROWSER_MODE=extension). Playwright MCP finds the profile that has the
- * Playwright MCP Bridge extension on disk, in the same place read here, and connects through the extension.
+ * Playwright Extension on disk, in the same place read here, and connects through the extension.
  */
 import { access, readFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-/** Chrome Web Store id of "Playwright MCP Bridge", the extension Playwright MCP --extension connects to. */
+/** Chrome Web Store id of "Playwright Extension" (formerly "Playwright MCP Bridge"), the extension Playwright MCP --extension connects to. */
 export const PLAYWRIGHT_EXTENSION_ID = 'mmlmfjhmonkocbjadbfplnigmagldckm';
 export const PLAYWRIGHT_EXTENSION_URL = `https://chromewebstore.google.com/detail/${PLAYWRIGHT_EXTENSION_ID}`;
 

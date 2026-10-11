@@ -1,0 +1,47 @@
+{
+  "id": "product-order-orchestrator",
+  "name": "Product Order Orchestrator",
+  "description": "COS, Explore, Execute and QA: tasks, questions, typed results and every safety rule for filling a shop basket.",
+  "version": "0.1.0",
+  "activation": { "onStartup": true },
+  "contracts": {
+    "tools": [
+      "poo_task",
+      "poo_task_status",
+      "poo_answer",
+      "poo_order_state",
+      "poo_accept_items",
+      "poo_new_order",
+      "poo_cancel",
+      "poo_ask_user",
+      "poo_update_product_list",
+      "poo_submit_selection",
+      "poo_submit_execute",
+      "poo_submit_qa"
+    ],
+    "agentToolResultMiddleware": ["openclaw"]
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["skillFile", "telegramUserId"],
+    "properties": {
+      "skillFile": { "type": "string", "minLength": 1, "description": "Absolute path of Explore's ask-what-to-buy SKILL.md" },
+      "telegramUserId": { "type": ["string", "integer"], "description": "Numeric Telegram user id of the owner" },
+      "shopId": { "type": "string", "minLength": 1, "default": "karashynyard" },
+      "browserMode": { "type": "string", "enum": ["extension", "cdp"], "default": "extension" },
+      "browserToolPrefix": { "type": "string", "minLength": 1, "default": "playwright__" },
+      "basketBrowser": { "type": "string", "minLength": 1 },
+      "stateFile": { "type": "string", "minLength": 1 },
+      "runTimeoutSeconds": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "explore": { "type": "integer", "minimum": 30, "maximum": 3600 },
+          "execute": { "type": "integer", "minimum": 30, "maximum": 3600 },
+          "qa": { "type": "integer", "minimum": 30, "maximum": 3600 }
+        }
+      }
+    }
+  }
+}

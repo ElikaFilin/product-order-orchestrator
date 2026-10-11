@@ -2,60 +2,44 @@
   "name": "product-order-orchestrator",
   "version": "0.1.0",
   "private": true,
-  "description": "Multi-agent (A2A) system that fills an online-shop basket in your own browser, driven from Telegram.",
+  "description": "OpenClaw agents (COS, Explore, Execute, QA) that fill an online-shop basket in your own browser, driven from Telegram.",
   "type": "module",
   "packageManager": "pnpm@10.29.3",
   "engines": {
     "node": ">=24.16.0"
   },
   "scripts": {
-    "start": "node --env-file-if-exists=.env --import tsx src/launcher.ts",
-    "start:all": "SUBAGENTS_PRESTART=1 node --env-file-if-exists=.env --import tsx src/launcher.ts",
-    "dashboard": "node --env-file-if-exists=.env --import tsx src/observability/hub/server.ts",
+    "start": "pnpm plugin:build && pnpm openclaw:config && pnpm openclaw gateway run",
+    "openclaw": "node --env-file-if-exists=.env --import tsx src/cli/openclaw.ts",
+    "dashboard": "pnpm openclaw dashboard",
     "doctor": "node --env-file-if-exists=.env --import tsx src/cli/doctor.ts",
     "smoke:shop": "node --env-file-if-exists=.env --import tsx src/cli/shop-smoke.ts",
-    "agent:explore": "node --env-file-if-exists=.env --import tsx src/agents/explore/main.ts",
-    "agent:execute": "node --env-file-if-exists=.env --import tsx src/agents/execute/main.ts",
-    "agent:qa": "node --env-file-if-exists=.env --import tsx src/agents/qa/main.ts",
-    "agent:cos": "node --env-file-if-exists=.env --import tsx src/agents/cos/main.ts",
     "browser:chrome": "bash scripts/chrome-profile.sh",
-    "clawmetry:setup": "bash scripts/clawmetry-setup.sh",
-    "clawmetry": "bash scripts/clawmetry-start.sh",
     "typecheck": "tsc -p .",
     "test": "vitest run",
     "test:watch": "vitest",
+    "plugin:build": "node scripts/build-plugin.mjs",
+    "openclaw:config": "node --env-file-if-exists=.env --import tsx src/cli/openclaw-config.ts",
     "test:e2e": "node --import tsx test/e2e/run.e2e.ts"
   },
   "dependencies": {
-    "@a2a-js/sdk": "1.3.0",
-    "@anthropic-ai/claude-agent-sdk": "0.3.293",
-    "@anthropic-ai/sdk": "0.132.1",
-    "@grammyjs/auto-retry": "2.0.2",
     "@modelcontextprotocol/sdk": "1.32.1",
-    "@opentelemetry/api": "1.9.1",
-    "@opentelemetry/exporter-trace-otlp-http": "0.223.0",
-    "@opentelemetry/resources": "2.12.0",
-    "@opentelemetry/sdk-trace-base": "2.12.0",
-    "@opentelemetry/semantic-conventions": "1.43.0",
     "@playwright/mcp": "0.0.83",
-    "agent-browser": "0.38.2",
-    "express": "5.2.1",
-    "grammy": "1.46.0",
-    "pino": "10.4.0",
     "tsx": "4.23.15",
-    "ws": "8.22.0",
+    "typebox": "1.3.34",
     "zod": "4.6.5"
   },
   "devDependencies": {
-    "@types/express": "5.0.6",
     "@types/node": "24.19.1",
-    "@types/ws": "8.18.2",
+    "esbuild": "0.28.2",
+    "openclaw": "2026.9.9",
     "typescript": "7.0.2",
     "vitest": "5.0.3"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
-      "esbuild"
+      "esbuild",
+      "openclaw"
     ]
   }
 }

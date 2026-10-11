@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { buildExecutePrompt, maxTurnsFor, resolveExecuteRequest } from '../src/agents/execute/request.js';
-import { finalizeExecuteResult, PageOps, summarizeExecute } from '../src/agents/execute/result.js';
-import { parseHelperCall } from '../src/browser/guard.js';
-import { ExecuteResult, type ExecuteRequest } from '../src/shared/contracts.js';
-import { AgentTaskError } from '../src/shared/task-executor.js';
+import { buildExecutePrompt, resolveExecuteRequest } from '../src/core/execute/request.js';
+import { finalizeExecuteResult, PageOps, summarizeExecute } from '../src/core/execute/result.js';
+import { parseHelperCall } from '../src/core/browser/guard.js';
+import { ExecuteResult, type ExecuteRequest } from '../src/core/contracts.js';
+import { AgentTaskError } from '../src/core/errors.js';
 
 const FILLET = 'Філе зі стегна індички, 1 кг';
 const LIVER = 'Печінка індички, 500 г';
@@ -95,17 +95,12 @@ describe('buildExecutePrompt', () => {
     expect(prompt).toContain(JSON.stringify(req.ops));
     expect(prompt).toContain('Mode: fix');
     expect(prompt).toContain('https://karashynyard.com.ua/');
-    expect(prompt).toContain(`cartUrl "${CART_URL}"`);
+    expect(prompt).toContain('call poo_submit_execute');
     expect(prompt).toContain('Instruction from the Chief of Staff:\nPlease hurry.');
   });
 
   it('omits the instruction block when COS sent no text', () => {
     expect(buildExecutePrompt(request([{ name: FILLET, targetQty: 1 }]), SHOP, '  ')).not.toContain('Chief of Staff');
-  });
-
-  it('sizes the turn budget by the number of ops', () => {
-    expect(maxTurnsFor(request([{ name: FILLET, targetQty: 1 }]))).toBe(19);
-    expect(maxTurnsFor(request(Array.from({ length: 22 }, (_, i) => ({ name: `p${i}`, targetQty: 1 }))))).toBe(82);
   });
 });
 

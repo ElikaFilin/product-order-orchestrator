@@ -2,7 +2,7 @@
  * Probe of a Chrome DevTools Protocol endpoint: a browser started with --remote-debugging-port
  * (BROWSER_MODE=cdp, the throwaway Chrome of the smoke and e2e tests).
  */
-import { errorMessage } from '../shared/logger.js';
+import { errorMessage } from '../core/errors.js';
 
 export interface CdpStatus {
   ok: boolean;

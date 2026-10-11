@@ -1,17 +1,13 @@
 import vm from 'node:vm';
 import { describe, expect, it } from 'vitest';
-import { readOnlyBasketGuard } from '../src/agents/qa/guard.js';
-import { createBrowserGuard } from '../src/browser/guard.js';
-import type { BrowserConnection } from '../src/browser/connection.js';
-import { browserToolset, type BrowserMcpKind, type BrowserRole, type BrowserToolset } from '../src/browser/mcp.js';
-import type { ToolGuard } from '../src/shared/claude.js';
-import { getShop } from '../src/shops/index.js';
-import { karashynyard } from '../src/shops/karashynyard/index.js';
+import { readOnlyBasketGuard } from '../src/core/qa/guard.js';
+import { createBrowserGuard } from '../src/core/browser/guard.js';
+import type { ToolGuard } from '../src/core/browser/guard.js';
+import { browserToolset, type BrowserMode, type BrowserRole, type BrowserToolset } from '../src/core/browser/toolset.js';
+import { getShop } from '../src/core/shops/index.js';
+import { karashynyard } from '../src/core/shops/karashynyard/index.js';
 
-const CDP: BrowserConnection = { mode: 'cdp', cdpUrl: 'http://127.0.0.1:9333' };
-const EXTENSION: BrowserConnection = { mode: 'extension', profileDir: 'Default' };
-const toolset = (kind: BrowserMcpKind, role: BrowserRole, connection: BrowserConnection = CDP) =>
-  browserToolset(kind, { role, connection, outputDir: '/tmp/poo-test', blockedOrigins: karashynyard.blockedOrigins, session: 'test' });
+const toolset = (role: BrowserRole, mode: BrowserMode) => browserToolset({ role, mode });
 
 /** The guard of one agent run that has opened its own tab (the first step of both playbooks). */
 function openedGuard(tools: BrowserToolset, wrap: (shopGuard: ToolGuard) => ToolGuard = (g) => g): ToolGuard {
@@ -19,15 +15,14 @@ function openedGuard(tools: BrowserToolset, wrap: (shopGuard: ToolGuard) => Tool
   if (!tools.startsInOwnTab) guard(tools.tool('browser_tabs'), { action: 'new', url: karashynyard.baseUrl });
   return guard;
 }
-const VARIANTS: Array<{ name: string; kind: BrowserMcpKind; connection: BrowserConnection; firstTool: string }> = [
-  { name: 'playwright over CDP', kind: 'playwright', connection: CDP, firstTool: 'browser_tabs' },
-  { name: 'playwright through the extension', kind: 'playwright', connection: EXTENSION, firstTool: 'browser_navigate' },
-  { name: 'agent-browser', kind: 'agent-browser', connection: CDP, firstTool: 'agent_browser_open' },
+const VARIANTS: Array<{ name: string; mode: BrowserMode; firstTool: string }> = [
+  { name: 'Playwright over CDP', mode: 'cdp', firstTool: 'browser_tabs' },
+  { name: 'Playwright through the extension', mode: 'extension', firstTool: 'browser_navigate' },
 ];
 
 /** Tool calls rendered in a playbook as `tool` `{json args}`. */
 function renderedCalls(markdown: string): Array<{ tool: string; input: Record<string, unknown> }> {
-  return [...markdown.matchAll(/`(mcp__\w+?__\w+)` `(\{[^`]*\})`/g)].map((m) => ({ tool: m[1]!, input: JSON.parse(m[2]!) }));
+  return [...markdown.matchAll(/`(playwright__\w+)` `(\{[^`]*\})`/g)].map((m) => ({ tool: m[1]!, input: JSON.parse(m[2]!) }));
 }
 
 const forbidden = (text: string) => karashynyard.forbiddenPatterns.some((p) => text.search(p) !== -1);
@@ -44,9 +39,9 @@ describe('karashynyard adapter', () => {
   });
 });
 
-describe.each(VARIANTS)('playbooks for $name', ({ kind, connection, firstTool }) => {
-  const tools: BrowserToolset = toolset(kind, 'execute', connection);
-  const qaTools: BrowserToolset = toolset(kind, 'qa', connection);
+describe.each(VARIANTS)('playbooks for $name', ({ mode, firstTool }) => {
+  const tools: BrowserToolset = toolset('execute', mode);
+  const qaTools: BrowserToolset = toolset('qa', mode);
   const execute = karashynyard.executePlaybook(tools);
   const qa = karashynyard.qaPlaybook(qaTools);
 
@@ -55,7 +50,7 @@ describe.each(VARIANTS)('playbooks for $name', ({ kind, connection, firstTool })
       [execute, tools.allowedTools],
       [qa, qaTools.allowedTools],
     ] as const) {
-      const names = [...markdown.matchAll(/mcp__\w+?__\w+/g)].map((m) => m[0]);
+      const names = [...markdown.matchAll(/playwright__\w+/g)].map((m) => m[0]);
       expect(names.length).toBeGreaterThan(5);
       for (const name of names) expect(allowed).toContain(name);
     }
@@ -81,17 +76,13 @@ describe.each(VARIANTS)('playbooks for $name', ({ kind, connection, firstTool })
       expect(closes).toHaveLength(tools.seesOnlyOwnTabs ? 1 : 0);
       if (closes.length) expect(calls.at(-1)).toEqual(closes[0]);
     }
-    expect(execute + qa).not.toMatch(/tab_switch|tab_list|"select"|"list"/);
+    expect(execute + qa).not.toMatch(/"select"|"list"/);
   });
 
   it('render the eval tool with the right code field', () => {
     const evals = renderedCalls(execute).filter((c) => c.tool === tools.evalTool.name);
     const setQty = evals.find((c) => String(c.input[tools.evalTool.codeField]).includes('setQty'));
-    if (kind === 'playwright') {
-      expect(setQty?.input).toEqual({ function: '() => window.__poo.setQty("Філе зі стегна індички, 1 кг", 2)' });
-    } else {
-      expect(setQty?.input).toEqual({ script: 'window.__poo.setQty("Філе зі стегна індички, 1 кг", 2)' });
-    }
+    expect(setQty?.input).toEqual({ function: '() => window.__poo.setQty("Філе зі стегна індички, 1 кг", 2)' });
   });
 
   it('Execute and QA put their own tab on the shop first; Execute re-checks with readCart', () => {
@@ -106,15 +97,10 @@ describe.each(VARIANTS)('playbooks for $name', ({ kind, connection, firstTool })
 
   it('QA clicks the cart icon, then falls back to the header icon and the cart URL', () => {
     const clicks = renderedCalls(qa).filter((c) => c.tool === qaTools.clickTool.name);
-    expect(clicks.map((c) => c.input.target ?? c.input.selector)).toEqual(['.t706__carticon-wrapper', 'a.t-menuwidgeticons__link_cart']);
+    expect(clicks.map((c) => c.input.target)).toEqual(['.t706__carticon-wrapper', 'a.t-menuwidgeticons__link_cart']);
     expect(renderedCalls(qa).some((c) => c.input.url === karashynyard.cartUrl)).toBe(true);
     expect(qa).toContain('window.__poo.readModal()');
     expect(qa).toContain('.t706__cartwin-products');
-  });
-
-  it('do not mention the other MCP server', () => {
-    const other = kind === 'playwright' ? 'agent_browser' : 'browser_evaluate';
-    expect(execute + qa).not.toContain(other);
   });
 });
 

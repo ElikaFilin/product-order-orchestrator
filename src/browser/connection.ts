@@ -1,11 +1,11 @@
 /**
  * How Execute and QA reach the browser (BROWSER_MODE) and the pre-flight check every task runs before it starts
  * its browser MCP server:
- *  - extension: the user's own Chrome profile through the Playwright MCP Bridge extension, no debugging port;
+ *  - extension: the user's own Chrome profile through the Playwright Extension, no debugging port;
  *  - cdp: a Chrome started with remote debugging (`pnpm browser:chrome`, the smoke and e2e tests).
  */
 import type { Env } from '../config/env.js';
-import { AgentTaskError } from '../shared/task-executor.js';
+import { AgentTaskError } from '../core/errors.js';
 import { checkCdp } from './cdp.js';
 import { PLAYWRIGHT_EXTENSION_URL, readChromeProfile } from './chrome.js';
 
@@ -36,10 +36,10 @@ export async function checkBrowser(connection: BrowserConnection): Promise<Brows
   if (connection.mode === 'extension') {
     const profile = await readChromeProfile(connection.profileDir);
     const label = `Chrome profile "${profile.name}" (${profile.dir})`;
-    if (profile.hasExtension) return { ok: true, detail: `${label} has the Playwright MCP Bridge extension` };
+    if (profile.hasExtension) return { ok: true, detail: `${label} has the Playwright Extension` };
     return {
       ok: false,
-      detail: `the Playwright MCP Bridge extension is not installed in ${label}`,
+      detail: `the Playwright Extension is not installed in ${label}`,
       hint:
         `In Chrome, switch to the profile your basket should live in and install the extension from ${PLAYWRIGHT_EXTENSION_URL}. ` +
         'If that is not the "Default" profile, set CHROME_PROFILE_DIR in .env to its directory name. Then ask me to retry.',

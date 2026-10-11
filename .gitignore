@@ -7,3 +7,17 @@ node_modules/
 coverage/
 *.log
 .DS_Store
+
+# OpenClaw plugin bundle (pnpm plugin:build)
+openclaw/plugin/dist/
+
+# Files OpenClaw may create in the agent workspaces (agents/<id>/)
+agents/*/.openclaw/
+agents/*/memory/
+agents/*/BOOTSTRAP.md
+agents/*/SOUL.md
+agents/*/IDENTITY.md
+agents/*/USER.md
+agents/*/MEMORY.md
+agents/*/DREAMS.md
+agents/*/HEARTBEAT.md

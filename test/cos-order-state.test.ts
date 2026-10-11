@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { OrderState } from '../src/agents/cos/order-state.js';
-import type { ExecuteResult, QaResult, Selection } from '../src/shared/contracts.js';
+import { OrderState } from '../src/core/order-state.js';
+import type { ExecuteResult, QaResult, Selection } from '../src/core/contracts.js';
 
 const SHOP = 'karashynyard';
 const FILLET = 'Філе зі стегна індички, 1 кг';
@@ -182,15 +182,8 @@ describe('OrderState', () => {
     expect(state.isVerified()).toBe(true);
   });
 
-  it('tracks pending questions and builds explore requests', () => {
+  it('builds explore requests', () => {
     const state = new OrderState(SHOP);
-    state.addQuestion({ taskId: 't1', agent: 'explore', question: 'Що замовити?', options: ['1', '2'] });
-    expect(state.pendingQuestions.get('t1')).toMatchObject({ agent: 'explore', relayed: false });
-    state.markRelayed('t1');
-    expect(state.pendingQuestions.get('t1')?.relayed).toBe(true);
-    state.removeQuestion('t1');
-    expect(state.pendingQuestions.size).toBe(0);
-
     expect(state.exploreSelectRequest()).toEqual({ type: 'explore-request', action: 'select-products', shopId: SHOP });
     expect(state.exploreUpdateRequest(['Нова паста'], [])).toEqual({
       type: 'explore-request',
@@ -208,12 +201,10 @@ describe('OrderState', () => {
     expect(() => state.executeFixRequest([])).toThrow(/at least one/);
 
     state.applySelection(selection);
-    state.addQuestion({ taskId: 't1', agent: 'qa', question: '?' });
     const before = state.orderId;
     state.reset();
     expect(state.orderId).not.toBe(before);
     expect(state.expectedItems()).toEqual([]);
-    expect(state.pendingQuestions.size).toBe(0);
     expect(state.lastQa).toBeUndefined();
   });
 
@@ -292,11 +283,19 @@ describe('OrderState', () => {
     ]);
   });
 
-  it('records when a question was relayed', () => {
+  it('survives a snapshot round trip, including a pending re-check', () => {
     const state = new OrderState(SHOP);
-    state.addQuestion({ taskId: 't1', agent: 'explore', question: '?' });
-    expect(state.pendingQuestions.get('t1')?.relayedAt).toBeUndefined();
-    state.markRelayed('t1');
-    expect(state.pendingQuestions.get('t1')?.relayedAt).toBeInstanceOf(Date);
+    state.applySelection(selection);
+    state.applyExecuteResult(executeResult(state.executeInitialRequest().ops.map((op) => ({ ...op, status: 'ok', actualQty: op.targetQty }))), 'initial');
+    const fix = state.executeFixRequest([{ name: FILLET, targetQty: 3 }]);
+    state.applyExecuteResult(executeResult(fix.ops.map((op) => ({ ...op, status: 'ok', actualQty: op.targetQty }))), 'fix');
+
+    const snapshot = JSON.parse(JSON.stringify(state.snapshot()));
+    const restored = OrderState.fromSnapshot(snapshot);
+    expect(restored.orderId).toBe(state.orderId);
+    expect(restored.expectedItems()).toEqual(state.expectedItems());
+    expect(restored.qaRequest()).toEqual(state.qaRequest());
+    expect(restored.needsCheck).toBe(true);
+    expect(restored.snapshot()).toEqual(state.snapshot());
   });
 });

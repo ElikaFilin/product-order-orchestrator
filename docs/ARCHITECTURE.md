@@ -1,48 +1,89 @@
 # Architecture
 
-Product Order Orchestrator is a small agent organization: one **Chief of Staff (COS)** that talks to you in
-Telegram, and three specialist sub-agents it spawns and delegates to over the **A2A protocol (v1.0)**.
-Sub-agents never talk to each other. Every hand-off goes through COS.
+Product Order Orchestrator is a small agent organization inside one [OpenClaw](https://github.com/openclaw/openclaw)
+gateway (2026.9.9): a **Chief of Staff (COS)** that talks to you in Telegram, and three specialist agents it starts
+as OpenClaw sub-agents. Sub-agents never talk to each other or to you; every hand-off goes through COS. A plugin from
+this repo holds every rule in code.
 
 ```mermaid
 flowchart LR
-  U["You (Telegram)"] <-->|Bot API| COS
-  subgraph host["Your Mac"]
-    COS["COS agent<br/>Telegram only"]
-    EX["Explore agent<br/>skill: ask-what-to-buy"]
-    EXE["Execute agent<br/>Playwright MCP"]
-    QA["QA agent<br/>Playwright MCP"]
-    CHROME["Chrome, your profile<br/>Playwright MCP Bridge extension"]
-    HUB["Dashboard hub :41010"]
-    CM["ClawMetry :8900<br/>(OpenClaw observability)"]
+  U["You (Telegram)"] <-->|Bot API| GW
+  subgraph mac["Your Mac"]
+    subgraph GW["OpenClaw gateway :18789 (loopback, pnpm start)"]
+      COS["cos<br/>claude-opus-5-5"]
+      EX["explore<br/>skill ask-what-to-buy"]
+      EXE["execute"]
+      QA["qa"]
+      PL["plugin product-order-orchestrator<br/>tools, hooks, task store"]
+      MCP["Playwright MCP<br/>(per Execute/QA run)"]
+    end
+    UI["Control UI<br/>sessions, tool calls, sub-agent runs"]
+    CHROME["Chrome, your profile<br/>Playwright Extension"]
   end
-  COS <-->|A2A JSON-RPC| EX
-  COS <-->|A2A JSON-RPC| EXE
-  COS <-->|A2A JSON-RPC| QA
-  EXE -->|extension| CHROME
-  QA -->|extension| CHROME
-  COS & EX & EXE & QA -. events .-> HUB
-  COS & EX & EXE & QA -. OTLP spans .-> CM
+  COS -->|sessions_spawn / sessions_send| EX & EXE & QA
+  EXE & QA --> MCP -->|extension| CHROME
+  PL -. hooks .- COS & EX & EXE & QA
+  UI --- GW
 ```
 
 ## Agents and their only capabilities
 
-| Agent | Process / port | LLM (default) | Tools it can call | Cannot |
+| Agent | Workspace | Model | Tools it can call | Cannot |
 |---|---|---|---|---|
-| COS | `src/agents/cos/main.ts` (A2A client, no port) | `claude-opus-5-5` | in-process MCP `cos`: Telegram send, delegate/answer/cancel sub-agent tasks, order state | browser, product list |
-| Explore | `src/agents/explore/main.ts` :41001 | `claude-sonnet-5-5` | `Skill` (only `ask-what-to-buy`), `mcp__explore__ask_user`, `mcp__explore__update_product_list` | Telegram, browser |
-| Execute | `src/agents/execute/main.ts` :41002 | `claude-sonnet-5-5` | Playwright MCP through the extension (own tab, look, wait, page scripts = one shop-helper call), `mcp__agent__ask_user` | Telegram, product list, clicking, typing |
-| QA | `src/agents/qa/main.ts` :41003 | `claude-sonnet-5-5` | Playwright MCP through the extension (same, read-only helper calls, clicks only the basket icon), `mcp__agent__ask_user` | Telegram, product list, changing the basket |
+| cos | `agents/cos/` | `anthropic/claude-opus-5-5` | `message` (your chat only), `sessions_spawn`, `sessions_yield`, `sessions_send`, `subagents`, `poo_task`, `poo_task_status`, `poo_answer`, `poo_order_state`, `poo_accept_items`, `poo_new_order`, `poo_cancel` | browser, product list, files, shell, web |
+| explore | `agents/explore/` | `anthropic/claude-sonnet-5-5` | `read` (its skill file only), `poo_ask_user`, `poo_update_product_list`, `poo_submit_selection` | messaging, browser |
+| execute | `agents/execute/` | `anthropic/claude-sonnet-5-5` | `playwright__browser_{tabs,navigate,snapshot,wait_for,evaluate,take_screenshot,console_messages}`, `poo_ask_user`, `poo_submit_execute` | messaging, clicking, typing |
+| qa | `agents/qa/` | `anthropic/claude-sonnet-5-5` | the Execute browser tools plus `playwright__browser_click` (basket icon only), `poo_ask_user`, `poo_submit_qa` | messaging, changing the basket |
 
-Enforcement is in code, not in prompts: every agent runs the Claude Agent SDK with `tools: []` (Explore: `['Skill']`),
-`strictMcpConfig`, `permissionMode: 'dontAsk'`, an explicit `allowedTools` list, all built-ins in
-`disallowedTools`, and a `PreToolUse` guard (`src/shared/claude.ts`). `ask_user` is **not** Telegram access: it parks
-the sub-agent's A2A task in `INPUT_REQUIRED`, and only COS decides how to ask you. The Telegram settings exist only in
-COS's own Node process: neither the sub-agents nor any agent's Claude Code process (nor the browser tool servers,
-which also never get the API key) receive them.
+How it is enforced (`src/openclaw/config.ts` generates the config, `src/plugin/` enforces):
 
-"COS can spawn sub-agents": `SubagentSupervisor` starts a sub-agent's A2A server process the first time COS needs it
-(health-checked through `/.well-known/agent-card.json`). Every delegation is a new A2A task, i.e. a fresh agent run.
+- Every agent has an explicit `tools.allow`; the global allow-list stays unset. A child's tools are capped by COS's
+  effective tools, so COS's list is the union of all four, and the plugin narrows every COS turn to COS's own tools
+  (`before_prompt_build` → `toolsAllow`) and refuses any other call (`before_tool_call`).
+- Only COS may spawn (`subagents.allowAgents`, `maxSpawnDepth: 1`); `tools.agentToAgent.enabled: false` and
+  `tools.sessions.visibility: "tree"`: COS reaches only its own children. Children never get `message`.
+- `tools.codeMode` and `tools.toolSearch` are off, the built-in `browser` plugin is disabled, the skill workshop and
+  memory dreaming are off, and `skipBootstrap` keeps OpenClaw's persona files out of the workspaces.
+- Telegram is bound to `cos` only, `dmPolicy: "allowlist"` with your id; `messages.visibleReplies: "message_tool"`
+  keeps COS's plain text private, so you see only what it sends with `message`. Messages you write while COS works
+  queue (`followup`).
+- Explore's session never starts the browser server (a deny on `playwright__*`); Execute and QA each start their own
+  Playwright MCP process per run.
+
+## The plugin
+
+`src/plugin/` (bundled to `openclaw/plugin/dist/index.js` with esbuild; the SDK is used for types only):
+
+- **Task store** (`store.ts`): replaces the old A2A tasks. A task holds the sub-agent request (built from the order
+  state), COS's instruction, its state (`created`, `running`, `input-required`, `answered`, `completed`, `failed`,
+  `canceled`), the child session, the questions with `askedAt` / `relayedAt` / `answeredAt` / `deliveredAt`, and the
+  result. The order (`src/core/order-state.ts`) and the tasks are one JSON file, rewritten atomically after every
+  change, so a gateway restart keeps them. OpenClaw loads the plugin module more than once per process, so the
+  runtime is shared through `globalThis`.
+- **COS tools** (`tools.ts`, `cos.ts`): `poo_task` builds the request from the order state, so the model never retypes
+  JSON or product lists. Every report carries a `next` step.
+- **`sessions_spawn`**: COS passes only `{agentId, task: <taskId>}`; the plugin refuses unknown tasks and wrong agents,
+  writes the task text (request, COS's instruction, the product question rendered from the skill table, the shop
+  playbook, earlier questions and answers when a task continues in a new session) and forces `mode: "run"`,
+  `cleanup: "keep"`, `completionTarget: "parent"` (the result reaches COS privately), a label and a time limit.
+- **Questions**: a child calls `poo_ask_user` and ends its run. COS sends `message "@relay:<taskId>"`; the plugin puts
+  the stored question in its place, word for word. Your answer goes to `poo_answer`, then a blocking `sessions_send` to
+  the **same** child session; the plugin writes that message from the stored answer. If the session is gone, the task
+  continues in a new session whose text replays the question and answer.
+- **Results**: children submit through typed tools; code computes the final payloads with the domain logic
+  (`selectionFromRows`, `finalizeExecuteResult` with the captured `PageOps`, `toQaResult` with `PageReads`) and folds
+  them into the order at once.
+- **Browser** (`before_tool_call` on `playwright__*`): the shop guard (`src/core/browser/guard.ts`) per run, keyed by
+  session and run (its own tab, allowed origins, the order-form patterns, page scripts = one helper call), QA's
+  read-only guard, and the shop helper injected by rewriting `browser_evaluate`'s `function`. The result middleware
+  hides your other tabs (`redact.ts`) and captures what the helper returned.
+- **Messages**: COS may send plain text to your chat only; `{{cart_link}}` is filled in, and any message with the basket
+  link is refused (and `message_sending` cancelled) until `OrderState.isVerified()`: the last QA check read the basket
+  window, nothing changed since, and nothing differs.
+- **Context**: every COS turn gets `<order_state>`, `<subagent_tasks>` (state and `next` of each task) and
+  `<pending_subagent_questions>` (with `received_at` and `relayed_at`).
+- **Lifecycle**: `subagent_spawned` binds the child session to its task, `subagent_ended` settles a run that ended
+  without a result, and `/new` (`before_reset`) clears the order and cancels its tasks.
 
 ## The order flow
 
@@ -50,117 +91,73 @@ which also never get the API key) receive them.
 sequenceDiagram
   participant U as You (Telegram)
   participant C as COS
+  participant P as Plugin
   participant E as Explore
   participant X as Execute
   participant Q as QA
-  U->>C: "хочу замовити" / "order"
-  C->>E: A2A task explore-request(select-products)
-  E-->>C: INPUT_REQUIRED (numbered product list, "номер - кількість")
-  C->>U: question
-  U->>C: "1 - 2\n5\n17 - 1"
-  C->>E: answer (same taskId)
-  E-->>C: COMPLETED + artifact Selection
-  C->>X: execute-request(initial, ops = selection)
-  X-->>C: COMPLETED + ExecuteResult
-  C->>Q: qa-request(expected = order state)
-  Note over Q: verdict computed in code from what the shop helper returned
-  Q-->>C: COMPLETED + QaResult(match | mismatch + differences)
-  alt mismatch
-    C->>U: differences, what to do?
-    U->>C: answer
-    C->>X: execute-request(fix, ops)
-    C->>Q: qa-request(expected, focus = changed lines)
+  U->>C: "хочу замовити"
+  C->>P: poo_task explore, sessions_spawn {task}
+  P-->>E: task text with the product question
+  E->>P: poo_ask_user (question), run ends
+  C->>U: message @relay:<task> (the question, verbatim)
+  U->>C: "1 - 2 / 5"
+  C->>P: poo_answer, sessions_send (same session)
+  E->>P: poo_submit_selection (rows) → selection in the order
+  C->>U: confirms the selection
+  C->>P: poo_task execute (whole expected basket)
+  X->>X: own tab, setQty per line (helper), readCart
+  X->>P: poo_submit_execute → results from the page
+  C->>P: poo_task qa (expected basket + re-checks)
+  Q->>Q: own tab, basket icon, readModal, readCart
+  Q->>P: poo_submit_qa → verdict computed in code
+  alt match, read in the basket window
+    C->>U: summary + {{cart_link}} (filled in now)
+  else mismatch
+    C->>U: the differences, fix or keep?
+    U->>C: "прибери зайве"
+    C->>P: poo_task execute fix → qa with focused re-checks
   end
-  C->>U: link https://karashynyard.com.ua/#opencart (opens the prepared basket in your Chrome profile)
 ```
 
-"save info - add <product> to product list" → COS delegates `explore-request(update-product-list)`; Explore edits the
-product table inside its skill (`agents/explore/.claude/skills/ask-what-to-buy/SKILL.md`), so the next selection
-question includes the product.
+## Contracts
 
-## A2A contracts (`src/shared/contracts.ts`)
+`src/core/contracts.ts` (zod) defines the payloads: `ExploreRequest`, `Selection`, `ProductListUpdate`,
+`ExecuteRequest` (absolute `targetQty` per product), `ExecuteResult`, `QaRequest` (expected basket plus `focus`
+re-checks: `quantity`, `present`, `absent`), `QaResult` (verdict, differences, failed checks). The re-checks are
+derived in code from the last fix's successful operations, so QA knows exactly what to look at ("quantity is now 2",
+"the item appeared", "the item is gone").
 
-Requests and results travel as A2A **DataParts** next to a human-readable text part. Each payload has a `type`.
+## The shop
 
-| Payload | From → to | Shape |
-|---|---|---|
-| `explore-request` | COS → Explore | `{action:'select-products', shopId, merge?}` (merge: added to the current order) or `{action:'update-product-list', shopId, add[], remove[]}` |
-| `user-question` | any sub-agent → COS (INPUT_REQUIRED status) | `{question, options?}` |
-| `selection` | Explore → COS (artifact) | `{shopId, items:[{name, qty, sku?}]}` |
-| `product-list-update` | Explore → COS (artifact) | `{shopId, added[], removed[], products[]}` |
-| `execute-request` | COS → Execute | `{shopId, mode:'initial'|'fix', ops:[{name, targetQty}]}` — `targetQty` is the absolute quantity, 0 removes |
-| `execute-result` | Execute → COS (artifact) | `{shopId, cartUrl, ops:[{name, targetQty, status, actualQty?}], cart[]}` |
-| `qa-request` | COS → QA | `{shopId, expected:[{name, qty}], focus:[{name, check:'quantity'|'present'|'absent', expectedQty?}]}` |
-| `qa-result` | QA → COS (artifact) | `{verdict:'match'|'mismatch', modalOpened, cart[], differences:[{kind:'missing'|'extra'|'quantity', name, expectedQty, actualQty}], focus[], cartUrl, notes?}` |
-| `error` | sub-agent → COS (FAILED status) | `{code, message, hint?}` |
+The basket of karashynyard.com.ua (Tilda) lives in the browser profile's `localStorage`, expires after 2 days and
+merges by adding quantities. So Execute and QA drive *your* Chrome profile, and Execute sets absolute quantities
+(`setQty`) instead of clicking "add". `src/core/shops/karashynyard/` holds the adapter: allowed origins, checkout
+endpoints to block (Playwright `--blocked-origins`), forbidden patterns, the in-page helper `window.__poo` (injected
+into every page script) and the Execute/QA playbooks. Another shop is another `ShopAdapter`.
 
-COS keeps the **order state** in code (`src/agents/cos/order-state.ts`): the A2A `contextId` of the order, the
-expected basket (from the Selection, plus merge selections, updated by successful fix operations or by you accepting
-extra items), the re-checks of the last fix, and pending sub-agent questions (with when they were relayed). Payloads
-COS forwards are built from that state, so no JSON is retyped by an LLM. The basket counts as verified only when the
-last QA check is current, read the open basket window (`modalOpened`) and nothing differs; only then is the link sent.
-
-Results do not depend on the models' retelling either: the select-products question is rendered in code from the
-skill's table and Explore returns table rows; Execute's and QA's results are taken from what the shop helper
-returned in the page (captured from the tool results), with the model's report only as a fallback.
-
-COS itself is one long-lived model session. Each user message reaches it with the time it was received (and whether
-it waited for the previous turn), the pending questions and the order state. Its budget counts per session: the
-session is replaced between turns at 60% of it, and a session cut by the budget or the turn limit is replaced by one
-that continues the step (a `<system_event>`) once the cut turn's delegations have finished.
-
-## The shop: karashynyard.com.ua (Tilda)
-
-* The basket is Tilda's T706 cart. It lives only in the browser's `localStorage["tcart"]` (no server cart), expires
-  after 2 days, and **merges by adding quantities**. So Execute and QA must drive *your* browser profile, and Execute
-  sets absolute quantities (`setQty`) instead of blindly clicking "add".
-* Browser connection (`BROWSER_MODE`, `src/browser/connection.ts`): `extension` (default) starts Playwright MCP with
-  `--extension --profile-dir-name <CHROME_PROFILE_DIR>`. It opens the Playwright MCP Bridge extension's connect page
-  in that Chrome profile, and the extension relays CDP through `chrome.debugger`, so no debugging port is opened.
-  `PLAYWRIGHT_MCP_EXTENSION_TOKEN` skips the per-connection approval. `cdp` attaches to `BROWSER_CDP_URL` (the
-  `pnpm browser:chrome` profile, the smoke and e2e tests). agent-browser has no extension mode, so it is accepted
-  (`EXECUTE_BROWSER_MCP` / `QA_BROWSER_MCP`) only with `cdp`. Before a task starts its browser server, a pre-flight
-  check (extension installed in the profile, or the CDP endpoint answers) fails fast with `BROWSER_NOT_CONNECTED`
-  and a fix for the user.
-* `src/shops/karashynyard/` holds the adapter: allowed origins, checkout endpoints to block, forbidden patterns,
-  and an in-page helper (`window.__poo`) that the guard injects into every eval call, plus the Execute/QA playbooks.
-* Safety: the order form ("Відправити замовлення") is never touched. Layers, all in code:
-  - tool lists per role (`src/browser/mcp.ts`): no typing, key presses, form filling, tab listing/switching,
-    `browser_run_code_unsafe` or file upload; only QA has a click tool;
-  - page scripts are exactly one call of the shop helper with literal arguments (`src/browser/guard.ts`); QA may
-    only call its read methods and click only the basket icon (`src/agents/qa/guard.ts`);
-  - guard patterns that deny any tool input mentioning the order form, a submit action or the order endpoints;
-    a navigation allow-list; Playwright `--blocked-origins` for the Tilda forms endpoints (the network layer;
-    agent-browser rejects domain filters on CDP sessions, so a QA on agent-browser relies on the layers above).
-* The user's other tabs: through the extension a session sees only its own tab group, which starts with the
-  connect page the extension opened for this run; the agent loads the shop in that tab and closes it as its last
-  browser call (then the guard denies every browser tool, since a new call would reconnect and open a tab).
-  Over CDP the Playwright guard denies every tool until the run opened its own tab. No run may list, select or close
-  tabs; every injected page script first checks that its tab is on the shop; tab titles
-  and URLs of other tabs are hidden in tool results (`src/browser/redact.ts`) before the model, the dashboard or a
-  log sees them.
+Playwright MCP (`--extension --profile-dir-name <profile>`) opens the Playwright Extension's connect page in your
+profile; with `PLAYWRIGHT_MCP_EXTENSION_TOKEN` the connection is approved automatically. Each run gets its own tab group
+and sees only it. `BROWSER_MODE=cdp` (a throwaway or `pnpm browser:chrome` Chrome over `--cdp-endpoint`) is for the
+smoke test and the e2e only.
 
 ## Observability
 
-Every process has one `Telemetry` (`src/observability/telemetry.ts`) that emits:
-
-1. **Dashboard events** to the built-in hub (`src/observability/hub/`, http://127.0.0.1:41010): agent status board,
-   A2A message timeline, tool calls with inputs/outputs/durations, errors, Telegram transcript (both sides), tokens
-   and cost (from each run's final usage report). COS's events carry the current order's `contextId`. At start the
-   hub marks sub-agents that no longer answer as stopped. Like the A2A servers, it listens on loopback only and
-   refuses requests addressed to other host names (DNS rebinding).
-2. **OpenTelemetry spans** over OTLP/HTTP to **ClawMetry** (http://127.0.0.1:8900), the OpenClaw observability
-   dashboard: `invoke_agent <agent>` per A2A task (trace context propagated in A2A message metadata `traceparent`),
-   `execute_tool <tool>` per tool call, `chat <model>` per model turn with that turn's GenAI token usage. One trace per
-   delegation tree.
+The OpenClaw Control UI is the dashboard: COS's chat with every tool-call card, sub-agent runs (view-only, through
+`/subagents list|info|log`), Agents, Activity, Usage (tokens, cost) and Logs. Session transcripts, including refused
+calls with their reasons, are in OpenClaw's state (`chat.history`).
 
 ## Runtime layout
 
+OpenClaw runs from this project (`src/openclaw/local.ts`): the pinned `node_modules/openclaw`, with
+`OPENCLAW_STATE_DIR` and `OPENCLAW_CONFIG_PATH` under `.runtime/openclaw/`, and the secrets from `.env` in the process
+environment (every `pnpm` script loads it). `pnpm start` builds the plugin, writes the config and runs the gateway in the
+foreground; `pnpm openclaw <command>` runs any OpenClaw command against the same state.
+
 ```
+.env                                    the only secrets: ANTHROPIC_API_KEY, TELEGRAM_BOT_TOKEN, PLAYWRIGHT_MCP_EXTENSION_TOKEN
 .runtime/
-  claude/            CLAUDE_CONFIG_DIR of the agents' Claude Code processes (no transcripts: persistSession off)
-  events/            dashboard event log (JSONL per day; older than RUNTIME_RETENTION_DAYS deleted on start)
-  logs/              stdout/stderr of spawned sub-agents
-  runs/<taskId>/     browser snapshots / screenshots per Execute/QA task (same retention)
-  clawmetry-venv/    ClawMetry install (pnpm clawmetry:setup)
+  openclaw/openclaw.json                generated config (no secrets, only ${VAR} references)
+  openclaw/gateway-token                the loopback gateway's token (0600, created on first start)
+  openclaw/state/                       sessions, transcripts, the plugin's order and tasks
+  playwright/                           browser snapshots and screenshots
 ```

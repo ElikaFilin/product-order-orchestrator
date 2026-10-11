@@ -1,0 +1,10 @@
+{
+  "name": "@product-order-orchestrator/openclaw-plugin",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "OpenClaw plugin of Product Order Orchestrator: tasks, questions, typed results and safety rules (built from src/plugin).",
+  "openclaw": {
+    "extensions": ["./dist/index.js"]
+  }
+}

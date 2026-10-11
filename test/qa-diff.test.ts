@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { diffBasket } from '../src/agents/qa/diff.js';
-import type { BasketItem, CartLine } from '../src/shared/contracts.js';
+import { diffBasket } from '../src/core/qa/diff.js';
+import type { BasketItem, CartLine } from '../src/core/contracts.js';
 
 const FILLET = 'Філе зі стегна індички, 1 кг';
 const LIVER = 'Печінка індички, 500 г';

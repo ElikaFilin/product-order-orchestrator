@@ -4,26 +4,23 @@
  * Exit code 1 when a required check fails. Secrets are never printed.
  */
 import { execFile } from 'node:child_process';
-import { existsSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import { createServer } from 'node:net';
+import { existsSync, readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { defaultSkillFile } from '../agents/explore/product-list.js';
 import { PLAYWRIGHT_EXTENSION_URL } from '../browser/chrome.js';
 import { browserConnection, checkBrowser } from '../browser/connection.js';
-import { SUB_AGENTS, subAgentSpec } from '../config/agents.js';
 import { env, ROOT_DIR } from '../config/env.js';
-import { fetchAgentCard } from '../shared/a2a.js';
-import { errorMessage } from '../shared/logger.js';
+import { errorMessage } from '../core/errors.js';
+import { skillFile } from '../core/explore/product-list.js';
+import { GATEWAY_PORT, localOpenClaw } from '../openclaw/local.js';
+import { bundleIsCurrent, configProblems, installedOpenClawVersion, openclaw, OPENCLAW_VERSION, parseCliJson, PLUGIN_ID, pluginProblems } from './openclaw-checks.js';
 
 const MIN_NODE = [24, 16] as const;
 const CHROME_BUNDLE_ID = 'com.google.chrome';
-const SKILL_FILE = defaultSkillFile();
+const SKILL_FILE = skillFile(ROOT_DIR);
 
 const exec = promisify(execFile);
-const require = createRequire(import.meta.url);
 
 interface Result {
   ok: boolean;
@@ -123,86 +120,48 @@ function checkExtensionToken(): Result {
   if (e.PLAYWRIGHT_MCP_EXTENSION_TOKEN) return pass('set');
   return fail(
     'empty: Chrome asks you to approve the connection on every Execute and QA run',
-    `Copy the token the Playwright MCP Bridge extension shows (${PLAYWRIGHT_EXTENSION_URL}) into .env as PLAYWRIGHT_MCP_EXTENSION_TOKEN, then restart.`,
+    `Copy the token the Playwright Extension shows (${PLAYWRIGHT_EXTENSION_URL}) into .env as PLAYWRIGHT_MCP_EXTENSION_TOKEN, then restart.`,
   );
 }
 
-async function checkHub(): Promise<Result> {
-  const e = env();
-  const url = `http://${e.DASHBOARD_HOST}:${e.DASHBOARD_PORT}`;
-  if (!e.DASHBOARD_ENABLED) return skip('disabled (DASHBOARD_ENABLED=0)');
-  try {
-    const { body } = await getJson(`${url}/api/health`);
-    const health = body as { ok?: boolean; events?: number };
-    if (health.ok) return pass(`${url} (${health.events ?? 0} events today)`);
-  } catch {
-    // reported below
-  }
-  if (await portFree(e.DASHBOARD_HOST, e.DASHBOARD_PORT)) {
-    return fail(`not running at ${url}`, '`pnpm start` starts it (or `pnpm dashboard` on its own).');
-  }
-  return fail(
-    `port ${e.DASHBOARD_PORT} is in use by another program`,
-    `Stop that program (\`lsof -nP -iTCP:${e.DASHBOARD_PORT} -sTCP:LISTEN\` shows it) or set DASHBOARD_PORT in .env.`,
+// ---------- OpenClaw (the project's own, see src/openclaw/local.ts) ----------
+
+function checkOpenclawPackage(): Result {
+  const version = installedOpenClawVersion();
+  if (!version) return fail('node_modules/openclaw is missing', 'corepack pnpm install');
+  return version === OPENCLAW_VERSION ? pass(`OpenClaw ${version}`) : fail(`OpenClaw ${version}, expected ${OPENCLAW_VERSION}`, 'corepack pnpm install');
+}
+
+async function checkOpenclawConfig(): Promise<Result> {
+  const { configPath } = localOpenClaw();
+  if (!existsSync(configPath)) return fail(`${path.relative(ROOT_DIR, configPath)} is missing`, '`pnpm openclaw:config` (or `pnpm start`, which runs it).');
+  const r = parseCliJson((await openclaw(['config', 'validate', '--json'])).stdout) as { valid?: boolean; errors?: unknown } | undefined;
+  return r?.valid ? pass(path.relative(ROOT_DIR, configPath)) : fail(`invalid: ${JSON.stringify(r?.errors ?? r).slice(0, 300)}`, '`pnpm openclaw:config` rewrites it.');
+}
+
+function checkAgents(): Result {
+  const { configPath } = localOpenClaw();
+  if (!existsSync(configPath)) return fail('no config yet', '`pnpm openclaw:config`');
+  const cfg = JSON.parse(readFileSync(configPath, 'utf8')) as Record<string, any>;
+  const problems = configProblems(
+    { entries: cfg.agents?.entries, bindings: cfg.bindings, telegram: cfg.channels?.telegram },
+    ROOT_DIR,
+    env().TELEGRAM_ALLOWED_USER_ID,
   );
+  return problems.length ? fail(problems.join('; '), '`pnpm openclaw:config` rewrites the config from .env.') : pass('cos, explore, execute, qa; Telegram → cos, owner only');
 }
 
-async function checkClawMetry(): Promise<Result> {
-  const url = env().CLAWMETRY_URL.replace(/\/$/, '');
-  try {
-    const res = await fetch(`${url}/api/otel-status`, { signal: AbortSignal.timeout(3_000) });
-    if (res.ok) return pass(`${url} (OTLP receiver at ${url}/v1/traces)`);
-    return fail(`${url} answered HTTP ${res.status}`, 'Is something else using that port? Start ClawMetry with `pnpm clawmetry`.');
-  } catch {
-    return fail(`not running at ${url}`, 'Optional trace dashboard: `pnpm clawmetry:setup` once, then `pnpm clawmetry`.');
-  }
+async function checkPlugin(): Promise<Result> {
+  const out = await openclaw(['plugins', 'inspect', PLUGIN_ID, '--runtime', '--json']);
+  const problems = out.code === 0 ? pluginProblems(parseCliJson(out.stdout)) : [`openclaw plugins inspect failed (exit ${out.code})`];
+  return problems.length ? fail(problems.join('; '), '`pnpm plugin:build && pnpm openclaw:config`, then restart the gateway.') : pass('loaded: tools, hooks and result middleware');
 }
 
-function portFree(host: string, port: number): Promise<boolean> {
-  return new Promise((resolve) => {
-    const server = createServer();
-    server.once('error', () => resolve(false));
-    server.listen(port, host, () => server.close(() => resolve(true)));
-  });
-}
-
-async function checkAgentPorts(): Promise<Result> {
-  const host = env().A2A_HOST;
-  const notes: string[] = [];
-  const blocked: string[] = [];
-  for (const name of SUB_AGENTS) {
-    const spec = subAgentSpec(name);
-    const card = await fetchAgentCard(spec.baseUrl);
-    if (card?.name === spec.title) notes.push(`${name} :${spec.port} running`);
-    else if (await portFree(host, spec.port)) notes.push(`${name} :${spec.port} free`);
-    else blocked.push(`${name} :${spec.port}`);
-  }
-  if (blocked.length === 0) return pass(notes.join(', '));
-  return fail(
-    `in use by another program: ${blocked.join(', ')}`,
-    'Stop that program (`lsof -nP -iTCP:<port> -sTCP:LISTEN` shows it) or set EXPLORE_PORT / EXECUTE_PORT / QA_PORT in .env.',
-  );
-}
-
-function checkSdkBinary(): Result {
-  const pkg = `@anthropic-ai/claude-agent-sdk-${process.platform}-${process.arch}`;
-  const candidates = process.platform === 'linux' ? [pkg, `${pkg}-musl`] : [pkg];
-  try {
-    // The SDK resolves its native binary relative to itself (pnpm keeps it next to the SDK, not hoisted).
-    const sdkRequire = createRequire(require.resolve('@anthropic-ai/claude-agent-sdk'));
-    for (const name of candidates) {
-      try {
-        const dir = path.dirname(sdkRequire.resolve(`${name}/package.json`));
-        const bin = path.join(dir, process.platform === 'win32' ? 'claude.exe' : 'claude');
-        if (existsSync(bin)) return pass(`${name} (${path.relative(ROOT_DIR, bin)})`);
-      } catch {
-        // try the next candidate
-      }
-    }
-  } catch (err) {
-    return fail(`@anthropic-ai/claude-agent-sdk is not installed (${errorMessage(err)})`, 'Run `corepack pnpm install`.');
-  }
-  return fail(`${pkg} is missing`, 'Reinstall without skipping optional dependencies: `corepack pnpm install --force`.');
+async function checkGateway(): Promise<Result> {
+  const out = await openclaw(['gateway', 'status', '--json', '--require-rpc'], 30_000);
+  return out.code === 0
+    ? pass(`http://127.0.0.1:${GATEWAY_PORT} answers`)
+    : fail('not running', '`pnpm start` in its own terminal (Ctrl+C stops it).');
 }
 
 // ---------- runner ----------
@@ -234,13 +193,11 @@ function checks(): Check[] {
       run: () =>
         e.TELEGRAM_ALLOWED_USER_ID !== undefined
           ? pass(String(e.TELEGRAM_ALLOWED_USER_ID))
-          : fail('empty: the bot runs in setup mode', 'Run `pnpm start`, send /start to your bot, put the id it replies with into .env, restart.'),
+          : fail('empty', 'Send any message to @userinfobot in Telegram and put the id it replies with into .env.'),
     },
     { name: `Browser (${e.BROWSER_MODE})`, required: true, run: checkBrowserReady },
     { name: 'Chrome is the default browser', required: false, run: checkDefaultBrowser },
-    { name: 'PLAYWRIGHT_MCP_EXTENSION_TOKEN', required: false, run: checkExtensionToken },
-    { name: 'Agent ports', required: true, run: checkAgentPorts },
-    { name: 'Agent SDK native binary', required: true, run: checkSdkBinary },
+    { name: 'PLAYWRIGHT_MCP_EXTENSION_TOKEN', required: true, run: checkExtensionToken },
     {
       name: 'Explore skill',
       required: true,
@@ -249,8 +206,19 @@ function checks(): Check[] {
           ? pass(path.relative(ROOT_DIR, SKILL_FILE))
           : fail(`${path.relative(ROOT_DIR, SKILL_FILE)} is missing`, 'Restore it from git: `git checkout -- agents/explore`.'),
     },
-    { name: 'Dashboard hub', required: false, run: checkHub },
-    { name: 'ClawMetry', required: false, run: checkClawMetry },
+    {
+      name: 'Plugin bundle',
+      required: true,
+      run: () => {
+        const b = bundleIsCurrent(ROOT_DIR);
+        return b.ok ? pass(b.detail) : fail(b.detail, 'pnpm plugin:build');
+      },
+    },
+    { name: `OpenClaw ${OPENCLAW_VERSION}`, required: true, run: checkOpenclawPackage },
+    { name: 'OpenClaw config', required: true, run: checkOpenclawConfig },
+    { name: 'Agents and Telegram', required: true, run: checkAgents },
+    { name: 'Plugin loaded', required: true, run: checkPlugin },
+    { name: 'Gateway running', required: true, run: checkGateway },
   ];
 }
 

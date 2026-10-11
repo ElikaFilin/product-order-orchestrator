@@ -3,17 +3,25 @@ import { env, resetEnvCache } from '../src/config/env.js';
 
 describe('env', () => {
   afterEach(() => {
-    delete process.env.A2A_HOST;
-    delete process.env.DASHBOARD_HOST;
+    delete process.env.TELEGRAM_ALLOWED_USER_ID;
+    delete process.env.PLAYWRIGHT_MCP_EXTENSION_TOKEN;
     resetEnvCache();
   });
 
-  it.each(['A2A_HOST', 'DASHBOARD_HOST'])('keeps %s on loopback: the servers have no authentication', (key) => {
-    process.env[key] = '0.0.0.0';
+  it('parses the allowed Telegram user id as a number and rejects anything else', () => {
+    process.env.TELEGRAM_ALLOWED_USER_ID = '111222333';
     resetEnvCache();
-    expect(() => env()).toThrow(/127\.0\.0\.1 or localhost/);
-    process.env[key] = 'localhost';
+    expect(env().TELEGRAM_ALLOWED_USER_ID).toBe(111222333);
+    process.env.TELEGRAM_ALLOWED_USER_ID = 'me';
     resetEnvCache();
-    expect(env()[key as 'A2A_HOST' | 'DASHBOARD_HOST']).toBe('localhost');
+    expect(() => env()).toThrow(/must be a number/);
+  });
+
+  it('treats blank values as unset', () => {
+    process.env.TELEGRAM_ALLOWED_USER_ID = ' ';
+    process.env.PLAYWRIGHT_MCP_EXTENSION_TOKEN = '  ';
+    resetEnvCache();
+    expect(env().TELEGRAM_ALLOWED_USER_ID).toBeUndefined();
+    expect(env().PLAYWRIGHT_MCP_EXTENSION_TOKEN).toBeUndefined();
   });
 });

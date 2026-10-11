@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canonicalizeSelection, productQuestion, QUESTION_HEAD, selectionFromRows } from '../src/agents/explore/selection.js';
+import { canonicalizeSelection, productQuestion, QUESTION_HEAD, selectionFromRows } from '../src/core/explore/selection.js';
 
 const PASTE = 'Горіхова паста з фунндуком 350 г';
 const KYIV = 'Котлети по-київськи з індички, 900 г';
