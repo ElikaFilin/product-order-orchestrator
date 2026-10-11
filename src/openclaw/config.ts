@@ -86,6 +86,8 @@ export function buildOpenClawConfig(o: OpenClawConfigOptions): Record<string, un
       defaults: {
         // The workspaces are the repo's agents/<id>/ folders; no persona files or first-run ritual.
         skipBootstrap: true,
+        // Without it the gateway falls back to an OpenAI model for sessions no agent entry names.
+        model: models.cos,
         heartbeat: { every: '0m' },
         subagents: { maxSpawnDepth: 1, archiveAfterMinutes: 0, runTimeoutSeconds: RUN_TIMEOUT_SECONDS.execute },
       },

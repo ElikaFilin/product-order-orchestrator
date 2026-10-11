@@ -39,6 +39,7 @@ describe('OpenClaw config', () => {
     for (const id of ['explore', 'execute', 'qa']) expect(entries[id].subagents).toBeUndefined();
     expect(extension.tools).toEqual({ sessions: { visibility: 'tree' }, agentToAgent: { enabled: false }, codeMode: false, toolSearch: false });
     expect(entries.cos.model).toBe('anthropic/claude-opus-5-5');
+    expect(defaults.model).toBe('anthropic/claude-opus-5-5');
     expect(entries.qa.model).toBe('anthropic/claude-sonnet-5-5');
   });
 
