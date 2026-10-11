@@ -28,6 +28,8 @@ export interface FakeTelegram {
   violations: string[];
   /** Resolves once the bot has started long polling (first getUpdates after the webhook was dropped). */
   polling(): Promise<void>;
+  /** Resolves on the next getUpdates call, e.g. once a restarted gateway polls again. */
+  nextPoll(): Promise<void>;
   sendUser(text: string): void;
   /** Wait for a bot message after transcript index `from` that satisfies `pred`; returns it and its index. */
   waitForBot(
@@ -152,6 +154,10 @@ export async function startFakeTelegram(opts: { token: string; userId: number })
     methods,
     violations,
     polling: () => (pollingStarted ? Promise.resolve() : new Promise<void>((r) => onPolling.push(r))),
+    nextPoll() {
+      pollingStarted = false;
+      return new Promise<void>((r) => onPolling.push(r));
+    },
     sendUser(text: string) {
       const command = text.match(/^\/\w+/)?.[0];
       const user = { id: opts.userId, is_bot: false, first_name: 'E2E', language_code: 'uk' };

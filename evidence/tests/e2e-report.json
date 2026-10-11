@@ -1,0 +1,358 @@
+{
+ "checks": [
+  {
+   "scenario": "A",
+   "label": "COS relays the product question word for word",
+   "ok": true
+  },
+  {
+   "scenario": "A",
+   "label": "the final message carries the link",
+   "ok": true,
+   "detail": "Кошик готовий. Відкрийте посилання, щоб перевірити і оформити замовлення:\n<a href=\"https://karashynyard.com.ua/#opencart\">https://karashynyard.com.ua/#opencart</a>"
+  },
+  {
+   "scenario": "A",
+   "label": "the browser basket holds exactly the order",
+   "ok": true,
+   "detail": "[{\"name\":\"Філе зі стегна індички, 1 кг\",\"qty\":2},{\"name\":\"Горіхова паста з фунндуком 350 г\",\"qty\":1}]"
+  },
+  {
+   "scenario": "A",
+   "label": "the link opens the prepared basket",
+   "ok": true,
+   "detail": "{\"open\":true,\"lines\":[{\"name\":\"Філе зі стегна індички, 1 кг\",\"qty\":2},{\"name\":\"Горіхова паста з фунндуком 350 г\",\"qty\":1}]}"
+  },
+  {
+   "scenario": "A",
+   "label": "QA verified the basket in its window before the link",
+   "ok": true
+  },
+  {
+   "scenario": "A",
+   "label": "all four agents ran inside the gateway",
+   "ok": true,
+   "detail": "side,cos,explore,execute,qa"
+  },
+  {
+   "scenario": "A",
+   "label": "every scripted model step was valid",
+   "ok": true
+  },
+  {
+   "scenario": "A",
+   "label": "the bot wrote only to the owner",
+   "ok": true
+  },
+  {
+   "scenario": "A",
+   "label": "the user's other tab never reached a model",
+   "ok": true
+  },
+  {
+   "scenario": "A",
+   "label": "no prompt carries a [MISSING] workspace file",
+   "ok": true
+  },
+  {
+   "scenario": "A",
+   "label": "COS's SOUL.md and MEMORY.md are in every COS prompt",
+   "ok": true,
+   "detail": "16/16"
+  },
+  {
+   "scenario": "B",
+   "label": "COS relays the product question word for word",
+   "ok": true
+  },
+  {
+   "scenario": "B",
+   "label": "the new order gets the link without a mismatch",
+   "ok": true
+  },
+  {
+   "scenario": "B",
+   "label": "the browser basket holds exactly the order",
+   "ok": true,
+   "detail": "[{\"name\":\"Філе зі стегна індички, 1 кг\",\"qty\":1}]"
+  },
+  {
+   "scenario": "B",
+   "label": "the link opens the prepared basket",
+   "ok": true,
+   "detail": "{\"open\":true,\"lines\":[{\"name\":\"Філе зі стегна індички, 1 кг\",\"qty\":1}]}"
+  },
+  {
+   "scenario": "B",
+   "label": "QA verified the basket in its window before the link",
+   "ok": true
+  },
+  {
+   "scenario": "B",
+   "label": "Execute cleared the line of the earlier order",
+   "ok": true
+  },
+  {
+   "scenario": "B",
+   "label": "the link comes after the fix and the re-check",
+   "ok": true
+  },
+  {
+   "scenario": "B",
+   "label": "the browser basket holds exactly the order",
+   "ok": true,
+   "detail": "[{\"name\":\"Філе зі стегна індички, 1 кг\",\"qty\":1},{\"name\":\"Горіхова паста з фунндуком 350 г\",\"qty\":1}]"
+  },
+  {
+   "scenario": "B",
+   "label": "the link opens the prepared basket",
+   "ok": true,
+   "detail": "{\"open\":true,\"lines\":[{\"name\":\"Філе зі стегна індички, 1 кг\",\"qty\":1},{\"name\":\"Горіхова паста з фунндуком 350 г\",\"qty\":1}]}"
+  },
+  {
+   "scenario": "B",
+   "label": "QA verified the basket in its window before the link",
+   "ok": true
+  },
+  {
+   "scenario": "B",
+   "label": "the re-check knows what to check (the extra line is gone)",
+   "ok": true
+  },
+  {
+   "scenario": "B",
+   "label": "every scripted model step was valid",
+   "ok": true
+  },
+  {
+   "scenario": "B",
+   "label": "the bot wrote only to the owner",
+   "ok": true
+  },
+  {
+   "scenario": "B",
+   "label": "the user's other tab never reached a model",
+   "ok": true
+  },
+  {
+   "scenario": "B",
+   "label": "no prompt carries a [MISSING] workspace file",
+   "ok": true
+  },
+  {
+   "scenario": "B",
+   "label": "COS's SOUL.md and MEMORY.md are in every COS prompt",
+   "ok": true,
+   "detail": "37/37"
+  },
+  {
+   "scenario": "C",
+   "label": "COS confirms the product list update",
+   "ok": true
+  },
+  {
+   "scenario": "C",
+   "label": "the skill lists the new product",
+   "ok": true
+  },
+  {
+   "scenario": "C",
+   "label": "COS confirms what it remembered",
+   "ok": true,
+   "detail": "Запам'ятав: Філе зі стегна індички, 1 кг × 1 буде в кожному новому замовленні."
+  },
+  {
+   "scenario": "C",
+   "label": "COS's MEMORY.md holds the every-order product",
+   "ok": true,
+   "detail": "# Memory\n\nWhat the user asked the Chief of Staff to remember with \"save this\". The Chief of Staff keeps this file up to date.\n\n## Every order\n\n- Філе зі стегна індички, 1 кг × 1\n\nProducts added to every new order: one line each, \"- <exact product name> × <quantity>\". None yet.\n\n## Notes\n\nNone yet.\n"
+  },
+  {
+   "scenario": "C",
+   "label": "the gateway restarted and polls Telegram again",
+   "ok": true
+  },
+  {
+   "scenario": "C",
+   "label": "the COS conversation with \"save this\" survived the restart",
+   "ok": true
+  },
+  {
+   "scenario": "C",
+   "label": "after the restart, /new starts a COS conversation without the \"save this\" message",
+   "ok": true,
+   "detail": "1 messages"
+  },
+  {
+   "scenario": "C",
+   "label": "the next question lists the new product",
+   "ok": true
+  },
+  {
+   "scenario": "C",
+   "label": "the question says the saved product is always added",
+   "ok": true,
+   "detail": "Що замовити? Напишіть номер товару і кількість, кожен товар з нового рядка, у форматі «номер - кількість». Без кількості = 1 шт.\nЗавжди додається до замовлення: Філе зі стегна індички, 1 кг × 1. Якщо більше нічого не треба, напишіть «0».\nНаприклад:\n1 - 2\n5\n\n1. Філе зі стегна індички, 1 кг — ≈665 грн\n2. Стегно індички, 1 кг — ≈595 грн\n3. Фарш з філе зі стегна індички, 1 кг — ≈735 грн\n4. Печінка індички, 500 г — ≈320 грн\n5. Котлети з фермерської індички та кролика, 900 г — ≈810 грн\n6. Котлети з фермерської індички, 900 г — ≈710 грн\n7. Філе зі стегна курки, 1 кг — ≈550 грн\n8. Шиї курки, 1 кг — ≈260 грн\n9. Фарш з філе стегна курки, 1 кг — ≈625 грн\n10. Печінка курочки, 500 г — ≈360 грн\n11. Серце яловиче, 1 кг — ≈430 грн\n12. Котлети з яловичини та телятини, 900 г — ≈710 грн\n13. Фарш з філе кролика, 500 г — ≈660 грн\n14. Печінка молодого кролика, 500 г — ≈655 грн\n15. Пельмені з фермерської індички, 700 г — ≈630 грн\n16. Масло ГХІ, 470 мл — ≈690 грн\n17. Натуральний фермерський мед, 1 л — ≈460 грн\n18. Яйця цесарки від фермерської цесарки, 10 шт — ≈360 грн\n19. Індичі яйця, від фермерської індички, 6 шт — ≈500 грн\n20. Курячі яйця від фермерських курей, 10 шт — ≈180 грн\n21. Горіхова паста з фунндуком 350 г — ≈850 грн\n22. Котлети по-київськи з індички, 900 г"
+  },
+  {
+   "scenario": "C",
+   "label": "the order with the saved product gets the link",
+   "ok": true
+  },
+  {
+   "scenario": "C",
+   "label": "the browser basket holds exactly the order",
+   "ok": true,
+   "detail": "[{\"name\":\"Горіхова паста з фунндуком 350 г\",\"qty\":1},{\"name\":\"Філе зі стегна індички, 1 кг\",\"qty\":1}]"
+  },
+  {
+   "scenario": "C",
+   "label": "the link opens the prepared basket",
+   "ok": true,
+   "detail": "{\"open\":true,\"lines\":[{\"name\":\"Горіхова паста з фунндуком 350 г\",\"qty\":1},{\"name\":\"Філе зі стегна індички, 1 кг\",\"qty\":1}]}"
+  },
+  {
+   "scenario": "C",
+   "label": "QA verified the basket in its window before the link",
+   "ok": true
+  },
+  {
+   "scenario": "C",
+   "label": "every scripted model step was valid",
+   "ok": true
+  },
+  {
+   "scenario": "C",
+   "label": "the bot wrote only to the owner",
+   "ok": true
+  },
+  {
+   "scenario": "C",
+   "label": "the user's other tab never reached a model",
+   "ok": true
+  },
+  {
+   "scenario": "C",
+   "label": "no prompt carries a [MISSING] workspace file",
+   "ok": true
+  },
+  {
+   "scenario": "C",
+   "label": "COS's SOUL.md and MEMORY.md are in every COS prompt",
+   "ok": true,
+   "detail": "23/23"
+  },
+  {
+   "scenario": "D",
+   "label": "COS relays the product question word for word",
+   "ok": true
+  },
+  {
+   "scenario": "D",
+   "label": "the order still completes",
+   "ok": true
+  },
+  {
+   "scenario": "D",
+   "label": "the early basket link never reached the user",
+   "ok": true
+  },
+  {
+   "scenario": "D",
+   "label": "the browser basket holds exactly the order",
+   "ok": true,
+   "detail": "[{\"name\":\"Філе зі стегна індички, 1 кг\",\"qty\":1}]"
+  },
+  {
+   "scenario": "D",
+   "label": "the link opens the prepared basket",
+   "ok": true,
+   "detail": "{\"open\":true,\"lines\":[{\"name\":\"Філе зі стегна індички, 1 кг\",\"qty\":1}]}"
+  },
+  {
+   "scenario": "D",
+   "label": "QA verified the basket in its window before the link",
+   "ok": true
+  },
+  {
+   "scenario": "D",
+   "label": "refused and recorded: COS sends the basket link before verification",
+   "ok": true,
+   "detail": "[{\"type\":\"text\",\"text\":\"The basket is not verified yet, so the link cannot be sent. Order 622397c4-ef11-4f1a-8fa4-6b59e65a0550 (shop: karashynyard)\\nExpected ba"
+  },
+  {
+   "scenario": "D",
+   "label": "refused and recorded: COS writes a file other than its memory",
+   "ok": true,
+   "detail": "[{\"type\":\"text\",\"text\":\"Only your memory file can be read or changed: MEMORY.md.\"}]"
+  },
+  {
+   "scenario": "D",
+   "label": "refused and recorded: Explore reads a file outside its skill",
+   "ok": true,
+   "detail": "[{\"type\":\"text\",\"text\":\"Only your skill file can be read: skills/ask-what-to-buy/SKILL.md.\"}]"
+  },
+  {
+   "scenario": "D",
+   "label": "refused and recorded: Execute navigates to another site",
+   "ok": true,
+   "detail": "[{\"type\":\"text\",\"text\":\"Navigation to https://example.com/ is not allowed. Allowed: https://karashynyard.com.ua and about:blank.\"}]"
+  },
+  {
+   "scenario": "D",
+   "label": "refused and recorded: Execute runs free JavaScript",
+   "ok": true,
+   "detail": "[{\"type\":\"text\",\"text\":\"Page scripts may only call the shop helper: one call per script, e.g. window.__poo.status() or window.__poo.setQty(\\\"<exact name>\\\", 2);"
+  },
+  {
+   "scenario": "D",
+   "label": "refused and recorded: Execute touches the order form",
+   "ok": true,
+   "detail": "[{\"type\":\"text\",\"text\":\"Blocked by the karashynyard safety rules (/Відправити\\\\s+замовлення/i): agents never touch the order form or submit orders.\"}]"
+  },
+  {
+   "scenario": "D",
+   "label": "refused and recorded: Execute clicks",
+   "ok": true,
+   "detail": "[{\"type\":\"text\",\"text\":\"Tool playwright__browser_click not found\"}]"
+  },
+  {
+   "scenario": "D",
+   "label": "refused and recorded: QA changes the basket",
+   "ok": true,
+   "detail": "[{\"type\":\"text\",\"text\":\"QA is read-only: it must not change the basket. Page scripts may only read it: one call per script, e.g. window.__poo.status() or window"
+  },
+  {
+   "scenario": "D",
+   "label": "refused and recorded: a sub-agent messages the user",
+   "ok": true,
+   "detail": "[{\"type\":\"text\",\"text\":\"Tool message not found\"}]"
+  },
+  {
+   "scenario": "D",
+   "label": "every scripted model step was valid",
+   "ok": true
+  },
+  {
+   "scenario": "D",
+   "label": "the bot wrote only to the owner",
+   "ok": true
+  },
+  {
+   "scenario": "D",
+   "label": "the user's other tab never reached a model",
+   "ok": true
+  },
+  {
+   "scenario": "D",
+   "label": "no prompt carries a [MISSING] workspace file",
+   "ok": true
+  },
+  {
+   "scenario": "D",
+   "label": "COS's SOUL.md and MEMORY.md are in every COS prompt",
+   "ok": true,
+   "detail": "18/18"
+  }
+ ]
+}

@@ -114,6 +114,17 @@ async function say(w: World, text: string, expect: (t: string) => boolean, label
   return (await w.tg.waitForBot(expect, { from, timeoutMs: STEP_MS, label, abortIf: () => w.gw.exited })).text;
 }
 
+/** Polls `probe` until it returns a value, for at most one step. */
+async function waitFor<T>(probe: () => Promise<T | undefined>, label: string): Promise<T> {
+  const deadline = Date.now() + STEP_MS;
+  for (;;) {
+    const value = await probe();
+    if (value !== undefined) return value;
+    if (Date.now() > deadline) throw new Error(`timed out after ${Math.round(STEP_MS / 1000)} s waiting for ${label}`);
+    await sleep(1000);
+  }
+}
+
 const isQuestion = (t: string) => t.startsWith(QUESTION_HEAD);
 const hasLink = (t: string) => t.includes(CART_URL);
 const sameLines = (a: CartLine[], b: Array<{ name: string; qty: number }>) =>
@@ -183,6 +194,20 @@ const SCENARIOS: Record<string, { probes: Probes; run: (w: World) => Promise<voi
       check(w.name, 'COS confirms what it remembered', remembered.includes(FILLET), remembered);
       const memory = await readFile(path.join(w.gw.workspaceRoot, 'agents/cos/MEMORY.md'), 'utf8');
       check(w.name, "COS's MEMORY.md holds the every-order product", memory.includes(`- ${FILLET} × 1`), memory);
+
+      // The memory outlives the process and the conversation: restart the gateway, then /new starts a new COS session.
+      const repolled = w.tg.nextPoll();
+      await w.gw.restart();
+      await repolled;
+      check(w.name, 'the gateway restarted and polls Telegram again', !w.gw.exited, w.gw.exited);
+      const before = JSON.stringify(await w.gw.history('agent:cos:main'));
+      check(w.name, 'the COS conversation with "save this" survived the restart', before.includes('save this'));
+      w.tg.sendUser('/new');
+      const fresh = await waitFor(async () => {
+        const history = await w.gw.history('agent:cos:main').catch(() => undefined);
+        return history && !JSON.stringify(history).includes('save this') ? history : undefined;
+      }, 'a new COS conversation after /new');
+      check(w.name, 'after the restart, /new starts a COS conversation without the "save this" message', Boolean(fresh), `${fresh?.length} messages`);
 
       const question = await say(w, 'хочу замовити', isQuestion, 'the product question');
       check(w.name, 'the next question lists the new product', /\d+\. Котлети по-київськи з індички, 900 г/.test(question));

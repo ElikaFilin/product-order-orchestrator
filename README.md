@@ -17,7 +17,8 @@ its Control UI shows every agent's sessions, tool calls, sub-agent runs, statuse
 Every rule is enforced in code by this repo's OpenClaw plugin (`src/plugin/`): which tools each agent may call, the
 shop safety guards, verbatim questions and answers, and that the basket link goes out only after QA verified the
 basket. The first supported shop is [karashynyard.com.ua](https://karashynyard.com.ua/). Diagrams and the order flow
-are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md); proof of each requirement (agents, memory, Telegram, agent-to-agent
+collaboration, the dashboard, a clean setup) with screenshots and transcripts is in [evidence/](evidence/README.md).
 
 Everything is project-level: OpenClaw runs from `node_modules`, its state lives in `.runtime/openclaw/`, and the
 secrets live only in this repo's `.env`. Nothing is installed globally and `~/.openclaw` is not used.
@@ -295,7 +296,7 @@ pnpm test                 # vitest: domain code, plugin (with a fake OpenClaw ho
 pnpm plugin:build         # bundle src/plugin into openclaw/plugin/dist/index.js
 pnpm openclaw:config      # write .runtime/openclaw/openclaw.json (--print: to stdout)
 pnpm smoke:shop           # live check of the shop adapter and guards in a throwaway headless Chrome
-pnpm test:e2e             # the whole system in an isolated gateway (about 6 minutes), see below
+pnpm test:e2e             # the whole system in an isolated gateway (about 5 minutes), see below
 ```
 
 Layout: `src/core/` (domain: contracts, order state, product list, selection, Execute/QA results, browser guards,
@@ -316,7 +317,8 @@ profile, driving the live shop; the basket lives only in that profile and the or
 - B: a new order clears what an earlier order left in the basket; then `add ...` keeps the basket, so an extra line
   causes a QA mismatch, "прибери зайве", a fix, a focused re-check, the link.
 - C: `save info - add ...` updates the skill; `save this - add ... to every future order` updates COS's `MEMORY.md`;
-  the next question lists the new product and says the saved one is always added, and the basket holds it.
+  then the gateway restarts and `/new` starts a new COS conversation; the next question lists the new product and says
+  the saved one is always added, and the basket holds it.
 - D: forbidden calls (the link before verification, COS writing a file other than its memory, a file outside the
   skill, another site, free JavaScript, the order form, a click from Execute, a basket write from QA, a sub-agent
   messaging the user) are refused and recorded in the session transcripts.

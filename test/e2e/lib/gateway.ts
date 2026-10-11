@@ -38,14 +38,29 @@ export interface TaskInfo {
 export class E2eGateway {
   private exit: string | undefined;
 
+  private child: ChildProcess;
+
   private constructor(
     readonly opts: GatewayOptions,
     readonly workspaceRoot: string,
     readonly stateFile: string,
     private readonly env: NodeJS.ProcessEnv,
-    private readonly child: ChildProcess,
   ) {
-    child.on('exit', (code, signal) => (this.exit = `gateway exited (code ${code}, signal ${signal})`));
+    this.child = this.spawn();
+  }
+
+  private spawn(): ChildProcess {
+    const log = openSync(path.join(this.opts.workDir, 'gateway.log'), 'a');
+    const child = spawn(process.execPath, [cli(this.opts.repoRoot), 'gateway', 'run', '--port', String(this.opts.port)], {
+      cwd: this.workspaceRoot,
+      env: this.env,
+      stdio: ['ignore', log, log],
+      detached: true,
+    });
+    child.on('exit', (code, signal) => {
+      if (child === this.child) this.exit = `gateway exited (code ${code}, signal ${signal})`;
+    });
+    return child;
   }
 
   static async start(opts: GatewayOptions): Promise<E2eGateway> {
@@ -90,14 +105,14 @@ export class E2eGateway {
       DO_NOT_TRACK: '1',
       NO_PROXY: '127.0.0.1,localhost',
     };
-    const log = openSync(dir('gateway.log'), 'a');
-    const child = spawn(process.execPath, [cli(opts.repoRoot), 'gateway', 'run', '--port', String(opts.port)], {
-      cwd: dir('repo'),
-      env,
-      stdio: ['ignore', log, log],
-      detached: true,
-    });
-    return new E2eGateway(opts, dir('repo'), dir('poo-state.json'), env, child);
+    return new E2eGateway(opts, dir('repo'), dir('poo-state.json'), env);
+  }
+
+  /** Stops the gateway and runs it again on the same state dir, config and workspaces: a real process restart. */
+  async restart(): Promise<void> {
+    await this.stop();
+    this.exit = undefined;
+    this.child = this.spawn();
   }
 
   get exited(): string | undefined {

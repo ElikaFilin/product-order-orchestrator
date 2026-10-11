@@ -1,0 +1,20 @@
+Product Order Orchestrator — doctor
+
+✓ Node.js >= 24.16: Node.js 24.21.0
+✓ .env file: <repo>/.env
+✓ ANTHROPIC_API_KEY: set
+✓ Telegram bot token: bot @order_orchestrator_bot, your chat: https://t.me/order_orchestrator_bot
+✓ TELEGRAM_ALLOWED_USER_ID: <owner-id>
+✓ Browser (extension): Chrome profile "<profile>" (Default) has the Playwright Extension
+✓ Chrome is the default browser: Google Chrome
+✓ PLAYWRIGHT_MCP_EXTENSION_TOKEN: set
+✓ Order form details (CHECKOUT_*): set: Execute fills the order form (it never sends it)
+✓ Explore skill: agents/explore/skills/ask-what-to-buy/SKILL.md
+✓ Plugin bundle: openclaw/plugin/dist/index.js
+✓ OpenClaw 2026.9.9: OpenClaw 2026.9.9
+✓ OpenClaw config: .runtime/openclaw/openclaw.json
+✓ Agents and Telegram: cos, explore, execute, qa; Telegram → cos, owner only
+✓ Plugin loaded: loaded: tools, hooks and result middleware
+✓ Gateway running: http://127.0.0.1:18789 answers
+
+All required checks passed.

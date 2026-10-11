@@ -1,0 +1,297 @@
+{
+  "gateway": {
+    "mode": "local",
+    "port": 18789,
+    "bind": "loopback",
+    "auth": {
+      "mode": "token",
+      "token": "${OPENCLAW_GATEWAY_TOKEN}"
+    }
+  },
+  "update": {
+    "checkOnStart": false
+  },
+  "discovery": {
+    "mdns": {
+      "mode": "off"
+    }
+  },
+  "agents": {
+    "ownership": "explicit",
+    "defaults": {
+      "skipBootstrap": true,
+      "model": "anthropic/claude-opus-5-5",
+      "heartbeat": {
+        "every": "0m"
+      },
+      "compaction": {
+        "memoryFlush": {
+          "enabled": false
+        }
+      },
+      "subagents": {
+        "maxSpawnDepth": 1,
+        "archiveAfterMinutes": 0,
+        "runTimeoutSeconds": 900
+      }
+    },
+    "entries": {
+      "cos": {
+        "name": "COS",
+        "description": "Chief of Staff: the only agent that talks to the user (Telegram).",
+        "workspace": "<repo>/agents/cos",
+        "model": "anthropic/claude-opus-5-5",
+        "skills": [],
+        "tools": {
+          "allow": [
+            "message",
+            "sessions_spawn",
+            "sessions_yield",
+            "sessions_send",
+            "subagents",
+            "read",
+            "write",
+            "edit",
+            "memory_search",
+            "memory_get",
+            "poo_task",
+            "poo_task_status",
+            "poo_answer",
+            "poo_order_state",
+            "poo_accept_items",
+            "poo_new_order",
+            "poo_cancel",
+            "poo_ask_user",
+            "poo_update_product_list",
+            "poo_submit_selection",
+            "playwright__browser_tabs",
+            "playwright__browser_navigate",
+            "playwright__browser_snapshot",
+            "playwright__browser_wait_for",
+            "playwright__browser_evaluate",
+            "playwright__browser_take_screenshot",
+            "playwright__browser_console_messages",
+            "poo_submit_execute",
+            "playwright__browser_click",
+            "poo_submit_qa"
+          ],
+          "fs": {
+            "workspaceOnly": true
+          }
+        },
+        "subagents": {
+          "allowAgents": [
+            "explore",
+            "execute",
+            "qa"
+          ],
+          "requireAgentId": true
+        }
+      },
+      "explore": {
+        "name": "Explore",
+        "workspace": "<repo>/agents/explore",
+        "model": "anthropic/claude-sonnet-5-5",
+        "skills": [
+          "ask-what-to-buy"
+        ],
+        "tools": {
+          "allow": [
+            "read",
+            "poo_ask_user",
+            "poo_update_product_list",
+            "poo_submit_selection"
+          ],
+          "deny": [
+            "playwright__*"
+          ]
+        }
+      },
+      "execute": {
+        "name": "Execute",
+        "workspace": "<repo>/agents/execute",
+        "model": "anthropic/claude-sonnet-5-5",
+        "skills": [],
+        "tools": {
+          "allow": [
+            "playwright__browser_tabs",
+            "playwright__browser_navigate",
+            "playwright__browser_snapshot",
+            "playwright__browser_wait_for",
+            "playwright__browser_evaluate",
+            "playwright__browser_take_screenshot",
+            "playwright__browser_console_messages",
+            "poo_ask_user",
+            "poo_submit_execute"
+          ]
+        }
+      },
+      "qa": {
+        "name": "Qa",
+        "workspace": "<repo>/agents/qa",
+        "model": "anthropic/claude-sonnet-5-5",
+        "skills": [],
+        "tools": {
+          "allow": [
+            "playwright__browser_tabs",
+            "playwright__browser_navigate",
+            "playwright__browser_snapshot",
+            "playwright__browser_wait_for",
+            "playwright__browser_evaluate",
+            "playwright__browser_take_screenshot",
+            "playwright__browser_console_messages",
+            "playwright__browser_click",
+            "poo_ask_user",
+            "poo_submit_qa"
+          ]
+        }
+      }
+    }
+  },
+  "bindings": [
+    {
+      "agentId": "cos",
+      "match": {
+        "channel": "telegram",
+        "accountId": "default"
+      }
+    }
+  ],
+  "commands": {
+    "ownerAllowFrom": [
+      "telegram:111111111"
+    ]
+  },
+  "memory": {
+    "search": {
+      "provider": "none"
+    }
+  },
+  "channels": {
+    "telegram": {
+      "enabled": true,
+      "dmPolicy": "allowlist",
+      "allowFrom": [
+        "tg:111111111"
+      ],
+      "streaming": {
+        "mode": "off"
+      }
+    }
+  },
+  "messages": {
+    "visibleReplies": "message_tool",
+    "queue": {
+      "byChannel": {
+        "telegram": "followup"
+      }
+    }
+  },
+  "tools": {
+    "sessions": {
+      "visibility": "tree"
+    },
+    "agentToAgent": {
+      "enabled": false
+    },
+    "codeMode": false,
+    "toolSearch": false
+  },
+  "skills": {
+    "workshop": {
+      "autonomous": {
+        "mode": "off"
+      }
+    }
+  },
+  "talk": {
+    "agentId": "cos"
+  },
+  "mcp": {
+    "servers": {
+      "playwright": {
+        "command": "<node 24>",
+        "args": [
+          "<repo>/node_modules/.pnpm/@playwright+mcp@0.0.83/node_modules/@playwright/mcp/cli.js",
+          "--extension",
+          "--profile-dir-name",
+          "Default",
+          "--output-dir",
+          "<repo>/.runtime/playwright",
+          "--output-max-size",
+          "20971520",
+          "--image-responses",
+          "omit",
+          "--codegen",
+          "none",
+          "--timeout-action",
+          "10000",
+          "--timeout-navigation",
+          "45000",
+          "--blocked-origins",
+          "https://forms.tildaapi.one;https://forms.tildacdn.com;https://forms2.tildacdn.com;https://forms.tildaapi.com"
+        ],
+        "env": {
+          "PLAYWRIGHT_MCP_EXTENSION_TOKEN": "${PLAYWRIGHT_MCP_EXTENSION_TOKEN}"
+        },
+        "toolFilter": {
+          "include": [
+            "browser_tabs",
+            "browser_navigate",
+            "browser_snapshot",
+            "browser_wait_for",
+            "browser_evaluate",
+            "browser_take_screenshot",
+            "browser_console_messages",
+            "browser_click"
+          ]
+        }
+      }
+    }
+  },
+  "plugins": {
+    "load": {
+      "paths": [
+        "<repo>/openclaw/plugin"
+      ]
+    },
+    "entries": {
+      "browser": {
+        "enabled": false
+      },
+      "memory-core": {
+        "config": {
+          "dreaming": {
+            "enabled": false
+          }
+        }
+      },
+      "product-order-orchestrator": {
+        "enabled": true,
+        "hooks": {
+          "allowConversationAccess": true,
+          "allowPromptInjection": true
+        },
+        "config": {
+          "skillFile": "<repo>/agents/explore/skills/ask-what-to-buy/SKILL.md",
+          "memoryFile": "<repo>/agents/cos/MEMORY.md",
+          "telegramUserId": "111111111",
+          "browserMode": "extension",
+          "browserToolPrefix": "playwright__",
+          "runTimeoutSeconds": {
+            "explore": 300,
+            "execute": 900,
+            "qa": 600
+          },
+          "basketBrowser": "Chrome, in your \"<profile>\" profile (if the link opens in another Chrome profile, open it in that one)",
+          "checkout": {
+            "name": "Тарас Приклад",
+            "phone": "+380670000000",
+            "delivery": "Доставка Новою поштою",
+            "address": "Київ, відділення 1"
+          }
+        }
+      }
+    }
+  }
+}
